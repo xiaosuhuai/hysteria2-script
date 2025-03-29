@@ -1,21 +1,49 @@
-# Hysteria 2 一键安装脚本
+# Hysteria 2 一键脚本
 
-这是一个用于快速安装和配置 Hysteria 2 服务器的一键安装脚本。
+一个适用于个人使用的 Hysteria 2 一键安装脚本。
 
 ## 功能特点
 
-- 自动安装最新版本的 Hysteria 2
-- 自动配置防火墙规则（支持 UFW、iptables 和 firewalld）
-- 自动生成自签名 SSL 证书
-- 自动配置 systemd 服务
-- 生成客户端配置和订阅链接
-- 支持自定义访问密码（也可自动生成随机密码）
-- 支持自定义端口（默认443）
+- 一键安装/卸载 Hysteria 2 服务
+- 自动配置 Nginx 订阅服务
+- 生成 Clash 和小火箭订阅链接
+- 支持扫码导入配置（小火箭）
+- 开机自启动
+
+## 使用方法
+
+```bash
+bash <(curl -fsSL https://raw.githubusercontent.com/xiaosuhuai/hysteria2-script/main/install.sh)
+```
+
+## 菜单选项
+
+1. 全新安装
+2. 卸载服务
+3. 查询订阅
+0. 退出脚本
+
+## 客户端支持
+
+推荐使用 Shadowrocket (小火箭)，简单好用。
+
+其他支持的客户端：
+- Stash (v2.5.0+)
+- Loon (v3.1.3+)
+- Surge (v5.8.0+)
+- Streisand (v1.5.6+)
+- Pharos Pro (v1.8.3+)
+- Egern (v1.14.0+)
+
+## 注意事项
+
+- 仅支持 x86_64 或 aarch64 架构
+- 需要 root 权限运行
+- 使用自签证书，请在客户端中开启"跳过证书验证"
 
 ## 系统要求
 
 - 支持的操作系统：Ubuntu、Debian、CentOS、RHEL
-- 需要 root 权限
 - 需要所选端口未被占用
 
 ## 快速开始
@@ -87,14 +115,6 @@ systemctl status hysteria-server
 # 查看服务日志
 journalctl -u hysteria-server
 ```
-
-## 注意事项
-
-1. 脚本使用自签名证书，客户端需要设置 `insecure=1`
-2. 请确保选择的端口未被其他服务占用
-3. 请妥善保管生成的配置信息和密码
-4. 如果选择自动生成随机密码，请务必保存好显示的密码信息
-5. 建议使用非常用端口，避免被封锁
 
 ## 问题反馈
 

@@ -429,23 +429,12 @@ EOF
     # 创建认证文件
     htpasswd -bc /etc/nginx/.htpasswd "$SUBSCRIBE_USER" "$SUBSCRIBE_PASS"
 
-    # URL 编码函数
-    urlencode() {
-        local string="$1"
-        echo -n "$string" | xxd -plain | tr -d '\n' | sed 's/\(..\)/%\1/g'
-    }
-
     # 生成带认证信息的订阅地址
     FULL_SUBSCRIBE_URL="http://${SUBSCRIBE_USER}:${SUBSCRIBE_PASS}@${SERVER_IP}/${SUBSCRIBE_PATH}/clash"
     
-    # URL 编码处理订阅地址
-    ENCODED_URL=$(urlencode "$FULL_SUBSCRIBE_URL")
-
-    # 生成各个客户端的直接订阅链接
-    STASH_URL="stash://install-config?url=${ENCODED_URL}&name=Hysteria2-${SERVER_IP}"
-    SHADOWROCKET_URL="shadowrocket://add/sub://${ENCODED_URL}?remark=Hysteria2-${SERVER_IP}"
-    SURGE_URL="surge:///install-config?url=${ENCODED_URL}&name=Hysteria2-${SERVER_IP}"
-    LOON_URL="loon://import?url=${ENCODED_URL}&name=Hysteria2-${SERVER_IP}"
+    # Base64 编码处理订阅地址（用于小火箭）
+    BASE64_URL=$(echo -n "$FULL_SUBSCRIBE_URL" | base64)
+    SHADOWROCKET_URL="sub://${BASE64_URL}"
 
     # 生成配置文件
     CLASH_CONFIG=$(cat << EOF
@@ -464,8 +453,52 @@ proxy-groups:
     proxies:
       - "$VMESS_NAME"
       - DIRECT
+  - name: "🌍 国外网站"
+    type: select
+    proxies:
+      - "🚀 节点选择"
+      - DIRECT
+  - name: "📲 电报信息"
+    type: select
+    proxies:
+      - "🚀 节点选择"
+      - DIRECT
+  - name: "🎬 国外媒体"
+    type: select
+    proxies:
+      - "🚀 节点选择"
+      - DIRECT
+  - name: "🌏 国内网站"
+    type: select
+    proxies:
+      - DIRECT
+      - "🚀 节点选择"
 
 rules:
+  - DOMAIN-SUFFIX,t.me,📲 电报信息
+  - DOMAIN-SUFFIX,tdesktop.com,📲 电报信息
+  - DOMAIN-SUFFIX,telegra.ph,📲 电报信息
+  - DOMAIN-SUFFIX,telegram.me,📲 电报信息
+  - DOMAIN-SUFFIX,telegram.org,📲 电报信息
+  - IP-CIDR,91.108.4.0/22,📲 电报信息
+  - IP-CIDR,91.108.8.0/22,📲 电报信息
+  - IP-CIDR,91.108.12.0/22,📲 电报信息
+  - IP-CIDR,91.108.16.0/22,📲 电报信息
+  - IP-CIDR,91.108.56.0/22,📲 电报信息
+  - IP-CIDR,149.154.160.0/20,📲 电报信息
+  - DOMAIN-KEYWORD,youtube,🎬 国外媒体
+  - DOMAIN-KEYWORD,netflix,🎬 国外媒体
+  - DOMAIN-SUFFIX,googlevideo.com,🎬 国外媒体
+  - DOMAIN-SUFFIX,youtube.com,🎬 国外媒体
+  - DOMAIN-SUFFIX,googleapis.com,🌍 国外网站
+  - DOMAIN-SUFFIX,google.com,🌍 国外网站
+  - DOMAIN-SUFFIX,gmail.com,🌍 国外网站
+  - DOMAIN-SUFFIX,facebook.com,🌍 国外网站
+  - DOMAIN-SUFFIX,twitter.com,🌍 国外网站
+  - DOMAIN-SUFFIX,instagram.com,🌍 国外网站
+  - DOMAIN-SUFFIX,wikipedia.org,🌍 国外网站
+  - DOMAIN-SUFFIX,reddit.com,🌍 国外网站
+  - GEOIP,CN,🌏 国内网站
   - MATCH,🚀 节点选择
 EOF
 )

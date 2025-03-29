@@ -7,7 +7,6 @@ if [ "$EUID" -ne 0 ]; then
 fi
 
 # 设置变量
-HYSTERIA_VERSION="v2.6.1"
 SERVER_IP=$(curl -s https://api.ipify.org) # 自动获取服务器公网IP
 echo "检测到服务器IP: $SERVER_IP"
 
@@ -119,7 +118,7 @@ chmod 600 /etc/hysteria/private.key
 
 # 安装 Hysteria 2
 echo "安装 Hysteria 2..."
-bash <(curl -fsSL https://get.hy2.sh/)
+curl -fsSL https://get.hy2.sh/ | bash
 
 # 验证安装
 if ! command -v hysteria >/dev/null 2>&1; then

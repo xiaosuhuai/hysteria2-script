@@ -420,6 +420,7 @@ EOF
     # 生成订阅链接
     SUBSCRIBE_PATH=$(openssl rand -hex 16)
     VMESS_NAME="Hysteria2-${SERVER_IP}"
+    BASE_SUBSCRIBE_URL="http://${SERVER_IP}/${SUBSCRIBE_PATH}/clash"
 
     # 生成订阅密码
     SUBSCRIBE_USER="user_$(openssl rand -hex 4)"
@@ -427,6 +428,24 @@ EOF
 
     # 创建认证文件
     htpasswd -bc /etc/nginx/.htpasswd "$SUBSCRIBE_USER" "$SUBSCRIBE_PASS"
+
+    # URL 编码函数
+    urlencode() {
+        local string="$1"
+        echo -n "$string" | xxd -plain | tr -d '\n' | sed 's/\(..\)/%\1/g'
+    }
+
+    # 生成带认证信息的订阅地址
+    FULL_SUBSCRIBE_URL="http://${SUBSCRIBE_USER}:${SUBSCRIBE_PASS}@${SERVER_IP}/${SUBSCRIBE_PATH}/clash"
+    
+    # URL 编码处理订阅地址
+    ENCODED_URL=$(urlencode "$FULL_SUBSCRIBE_URL")
+
+    # 生成各个客户端的直接订阅链接
+    STASH_URL="stash://install-config?url=${ENCODED_URL}&name=Hysteria2-${SERVER_IP}"
+    SHADOWROCKET_URL="shadowrocket://add/sub://${ENCODED_URL}?remark=Hysteria2-${SERVER_IP}"
+    SURGE_URL="surge:///install-config?url=${ENCODED_URL}&name=Hysteria2-${SERVER_IP}"
+    LOON_URL="loon://import?url=${ENCODED_URL}&name=Hysteria2-${SERVER_IP}"
 
     # 生成配置文件
     CLASH_CONFIG=$(cat << EOF
@@ -508,11 +527,19 @@ EOF
     cat > /etc/hysteria/subscribe/info.txt << EOF
 订阅用户名：${SUBSCRIBE_USER}
 订阅密码：${SUBSCRIBE_PASS}
-普通订阅链接：http://${SERVER_IP}/${SUBSCRIBE_PATH}/clash
-直接订阅链接：http://${SUBSCRIBE_USER}:${SUBSCRIBE_PASS}@${SERVER_IP}/${SUBSCRIBE_PATH}/clash
+普通订阅链接：${BASE_SUBSCRIBE_URL}
+直接订阅链接：${FULL_SUBSCRIBE_URL}
 
-提示：直接订阅链接包含认证信息，扫码后可直接使用，但不建议分享给他人。
-注意：目前 QuantumultX 不支持 Hysteria2 协议
+=== 客户端直接订阅链接 ===
+Shadowrocket：${SHADOWROCKET_URL}
+Stash：${STASH_URL}
+Surge：${SURGE_URL}
+Loon：${LOON_URL}
+
+提示：
+1. 直接订阅链接包含认证信息，可直接使用，但不建议分享给他人
+2. 点击客户端对应的链接可直接在客户端中打开并订阅
+3. 如需分享，请使用普通订阅链接，对方需手动输入用户名和密码
 EOF
 
     # 创建查询脚本
@@ -532,6 +559,20 @@ if [ -f "/etc/hysteria/subscribe/info.txt" ]; then
         echo -e "\n=== 订阅二维码（扫描后可直接使用） ==="
         echo "扫描下方二维码可直接导入配置（无需手动输入认证信息）："
         qrencode -t ANSIUTF8 "$SUBSCRIBE_LINK"
+        
+        # 获取各个客户端的链接并生成二维码
+        echo -e "\n=== 客户端专属二维码 ==="
+        echo "Shadowrocket 专属订阅二维码："
+        grep "Shadowrocket：" /etc/hysteria/subscribe/info.txt | cut -d'：' -f2 | qrencode -t ANSIUTF8
+        
+        echo -e "\nStash 专属订阅二维码："
+        grep "Stash：" /etc/hysteria/subscribe/info.txt | cut -d'：' -f2 | qrencode -t ANSIUTF8
+        
+        echo -e "\nSurge 专属订阅二维码："
+        grep "Surge：" /etc/hysteria/subscribe/info.txt | cut -d'：' -f2 | qrencode -t ANSIUTF8
+        
+        echo -e "\nLoon 专属订阅二维码："
+        grep "Loon：" /etc/hysteria/subscribe/info.txt | cut -d'：' -f2 | qrencode -t ANSIUTF8
     fi
 else
     echo "未找到订阅信息，请确认是否已安装 Hysteria 2"
@@ -550,20 +591,39 @@ EOF
     echo -e "\n=== 订阅信息 ==="
     echo "订阅用户名：$SUBSCRIBE_USER"
     echo "订阅密码：$SUBSCRIBE_PASS"
+    
     echo -e "\n=== 订阅链接 ==="
-    echo "普通订阅链接：http://${SERVER_IP}/${SUBSCRIBE_PATH}/clash"
-    echo "直接订阅链接：http://${SUBSCRIBE_USER}:${SUBSCRIBE_PASS}@${SERVER_IP}/${SUBSCRIBE_PATH}/clash"
+    echo "普通订阅链接：${BASE_SUBSCRIBE_URL}"
+    echo "直接订阅链接：${FULL_SUBSCRIBE_URL}"
+    
+    echo -e "\n=== 客户端直接订阅链接 ==="
+    echo "Shadowrocket：${SHADOWROCKET_URL}"
+    echo "Stash：${STASH_URL}"
+    echo "Surge：${SURGE_URL}"
+    echo "Loon：${LOON_URL}"
+    
     echo -e "\n=== 订阅二维码（扫描后可直接使用） ==="
-    echo "扫描下方二维码可直接导入配置（无需手动输入认证信息）："
-    SUBSCRIBE_LINK="http://${SUBSCRIBE_USER}:${SUBSCRIBE_PASS}@${SERVER_IP}/${SUBSCRIBE_PATH}/clash"
-    qrencode -t ANSIUTF8 "$SUBSCRIBE_LINK"
+    echo "通用订阅二维码："
+    qrencode -t ANSIUTF8 "$FULL_SUBSCRIBE_URL"
+    
+    echo -e "\nShadowrocket 专属订阅二维码："
+    qrencode -t ANSIUTF8 "$SHADOWROCKET_URL"
+    
+    echo -e "\nStash 专属订阅二维码："
+    qrencode -t ANSIUTF8 "$STASH_URL"
+    
+    echo -e "\nSurge 专属订阅二维码："
+    qrencode -t ANSIUTF8 "$SURGE_URL"
+    
+    echo -e "\nLoon 专属订阅二维码："
+    qrencode -t ANSIUTF8 "$LOON_URL"
     
     echo -e "\n提示："
-    echo "1. 直接订阅链接和二维码包含认证信息，扫描后可直接使用，但请勿分享给他人"
+    echo "1. 直接订阅链接和二维码包含认证信息，可直接使用，但请勿分享给他人"
     echo "2. 如需分享，请使用普通订阅链接，对方需手动输入用户名和密码"
-    echo "3. 订阅信息已保存到：/etc/hysteria/subscribe/"
-    echo "4. 使用 'hy2sub' 命令可随时查看订阅信息"
-    echo "5. 注意：目前 QuantumultX 不支持 Hysteria2 协议"
+    echo "3. 点击客户端对应的链接可直接在手机上打开对应客户端并导入配置"
+    echo "4. 订阅信息已保存到：/etc/hysteria/subscribe/"
+    echo "5. 使用 'hy2sub' 命令可随时查看订阅信息"
     echo -e "\n=== iOS 客户端支持 ==="
     echo "支持的客户端（版本要求）："
     echo "1. Shadowrocket (v2.2.35+) - 推荐，性价比高"

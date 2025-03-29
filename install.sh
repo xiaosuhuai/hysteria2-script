@@ -527,19 +527,10 @@ EOF
     cat > /etc/hysteria/subscribe/info.txt << EOF
 订阅用户名：${SUBSCRIBE_USER}
 订阅密码：${SUBSCRIBE_PASS}
-普通订阅链接：${BASE_SUBSCRIBE_URL}
-直接订阅链接：${FULL_SUBSCRIBE_URL}
 
-=== 客户端直接订阅链接 ===
-Shadowrocket：${SHADOWROCKET_URL}
-Stash：${STASH_URL}
-Surge：${SURGE_URL}
-Loon：${LOON_URL}
-
-提示：
-1. 直接订阅链接包含认证信息，可直接使用，但不建议分享给他人
-2. 点击客户端对应的链接可直接在客户端中打开并订阅
-3. 如需分享，请使用普通订阅链接，对方需手动输入用户名和密码
+=== 订阅链接 ===
+Clash订阅：${BASE_SUBSCRIBE_URL}
+小火箭订阅：${SHADOWROCKET_URL}
 EOF
 
     # 创建查询脚本
@@ -549,30 +540,14 @@ EOF
 if [ -f "/etc/hysteria/subscribe/info.txt" ]; then
     echo "=== Hysteria 2 订阅信息 ==="
     cat /etc/hysteria/subscribe/info.txt
-    echo -e "\n配置文件位置："
-    echo "Clash: /etc/hysteria/subscribe/clash.yaml"
     
     # 获取订阅链接（带认证信息的链接）
-    SUBSCRIBE_LINK=$(grep "直接订阅链接：" /etc/hysteria/subscribe/info.txt | cut -d' ' -f2)
+    SUBSCRIBE_LINK=$(grep "小火箭订阅：" /etc/hysteria/subscribe/info.txt | cut -d'：' -f2)
     
     if [ ! -z "$SUBSCRIBE_LINK" ]; then
-        echo -e "\n=== 订阅二维码（扫描后可直接使用） ==="
-        echo "扫描下方二维码可直接导入配置（无需手动输入认证信息）："
-        qrencode -t ANSIUTF8 "$SUBSCRIBE_LINK"
-        
-        # 获取各个客户端的链接并生成二维码
-        echo -e "\n=== 客户端专属二维码 ==="
-        echo "Shadowrocket 专属订阅二维码："
-        grep "Shadowrocket：" /etc/hysteria/subscribe/info.txt | cut -d'：' -f2 | qrencode -t ANSIUTF8
-        
-        echo -e "\nStash 专属订阅二维码："
-        grep "Stash：" /etc/hysteria/subscribe/info.txt | cut -d'：' -f2 | qrencode -t ANSIUTF8
-        
-        echo -e "\nSurge 专属订阅二维码："
-        grep "Surge：" /etc/hysteria/subscribe/info.txt | cut -d'：' -f2 | qrencode -t ANSIUTF8
-        
-        echo -e "\nLoon 专属订阅二维码："
-        grep "Loon：" /etc/hysteria/subscribe/info.txt | cut -d'：' -f2 | qrencode -t ANSIUTF8
+        echo -e "\n=== 订阅二维码 ==="
+        echo "小火箭扫码订阅："
+        qrencode -t ANSIUTF8 -s 1 "$SUBSCRIBE_LINK"
     fi
 else
     echo "未找到订阅信息，请确认是否已安装 Hysteria 2"
@@ -593,37 +568,18 @@ EOF
     echo "订阅密码：$SUBSCRIBE_PASS"
     
     echo -e "\n=== 订阅链接 ==="
-    echo "普通订阅链接：${BASE_SUBSCRIBE_URL}"
-    echo "直接订阅链接：${FULL_SUBSCRIBE_URL}"
+    echo "Clash订阅：${BASE_SUBSCRIBE_URL}"
+    echo "小火箭订阅：${SHADOWROCKET_URL}"
     
-    echo -e "\n=== 客户端直接订阅链接 ==="
-    echo "Shadowrocket：${SHADOWROCKET_URL}"
-    echo "Stash：${STASH_URL}"
-    echo "Surge：${SURGE_URL}"
-    echo "Loon：${LOON_URL}"
-    
-    echo -e "\n=== 订阅二维码（扫描后可直接使用） ==="
-    echo "通用订阅二维码："
-    qrencode -t ANSIUTF8 "$FULL_SUBSCRIBE_URL"
-    
-    echo -e "\nShadowrocket 专属订阅二维码："
-    qrencode -t ANSIUTF8 "$SHADOWROCKET_URL"
-    
-    echo -e "\nStash 专属订阅二维码："
-    qrencode -t ANSIUTF8 "$STASH_URL"
-    
-    echo -e "\nSurge 专属订阅二维码："
-    qrencode -t ANSIUTF8 "$SURGE_URL"
-    
-    echo -e "\nLoon 专属订阅二维码："
-    qrencode -t ANSIUTF8 "$LOON_URL"
+    echo -e "\n=== 订阅二维码 ==="
+    echo "小火箭扫码订阅："
+    qrencode -t ANSIUTF8 -s 1 "$SHADOWROCKET_URL"
     
     echo -e "\n提示："
-    echo "1. 直接订阅链接和二维码包含认证信息，可直接使用，但请勿分享给他人"
-    echo "2. 如需分享，请使用普通订阅链接，对方需手动输入用户名和密码"
-    echo "3. 点击客户端对应的链接可直接在手机上打开对应客户端并导入配置"
-    echo "4. 订阅信息已保存到：/etc/hysteria/subscribe/"
-    echo "5. 使用 'hy2sub' 命令可随时查看订阅信息"
+    echo "1. 推荐使用 Shadowrocket 客户端，简单好用"
+    echo "2. 如需分享，请使用 Clash 订阅链接，对方需手动输入用户名和密码"
+    echo "3. 订阅信息已保存到：/etc/hysteria/subscribe/"
+    echo "4. 使用 'hy2sub' 命令可随时查看订阅信息"
     echo -e "\n=== iOS 客户端支持 ==="
     echo "支持的客户端（版本要求）："
     echo "1. Shadowrocket (v2.2.35+) - 推荐，性价比高"

@@ -74,10 +74,21 @@ uninstall_hysteria() {
     # 删除配置文件和证书
     rm -rf /etc/hysteria
     
-    # 删除 Nginx 配置和认证文件
-    rm -f /etc/nginx/conf.d/hysteria-subscribe.conf
-    rm -f /etc/nginx/.htpasswd
-    systemctl restart nginx
+    # 询问是否删除 Nginx
+    read -p "是否同时卸载 Nginx？这可能会影响其他使用 Nginx 的服务 (y/n): " remove_nginx
+    if [[ $remove_nginx =~ ^[Yy]$ ]]; then
+        echo "正在卸载 Nginx..."
+        apt remove -y nginx nginx-common
+        apt autoremove -y
+        rm -rf /etc/nginx
+        echo "Nginx 已完全卸载"
+    else
+        # 仅删除 Hysteria 相关的 Nginx 配置
+        echo "仅删除 Hysteria 相关的 Nginx 配置..."
+        rm -f /etc/nginx/conf.d/hysteria-subscribe.conf
+        rm -f /etc/nginx/.htpasswd
+        systemctl restart nginx
+    fi
     
     # 删除查询脚本
     rm -f /usr/local/bin/hy2sub

@@ -133,6 +133,41 @@ query_subscription() {
     fi
 }
 
+# 检查 Nginx 配置和服务状态的函数
+check_nginx() {
+    echo "检查 Nginx 配置和服务状态..."
+    
+    # 检查 Nginx 是否安装
+    if ! command -v nginx >/dev/null 2>&1; then
+        echo "Nginx 未安装，正在安装..."
+        apt update
+        apt install -y nginx
+    fi
+    
+    # 确保 nginx 目录存在
+    mkdir -p /etc/nginx/conf.d
+    
+    # 备份默认配置
+    if [ -f "/etc/nginx/sites-enabled/default" ]; then
+        mv /etc/nginx/sites-enabled/default /etc/nginx/sites-enabled/default.bak
+    fi
+    
+    # 测试配置文件
+    nginx -t
+    
+    # 检查服务状态
+    if ! systemctl is-active nginx >/dev/null 2>&1; then
+        echo "Nginx 服务未运行，正在启动..."
+        systemctl start nginx
+    fi
+    
+    # 确保服务开机自启
+    systemctl enable nginx
+    
+    echo "Nginx 服务状态："
+    systemctl status nginx --no-pager
+}
+
 # 安装函数
 install_hysteria() {
     # 设置变量
@@ -179,6 +214,9 @@ install_hysteria() {
     # 安装必要的软件包
     apt update
     apt install -y curl openssl net-tools lsof nginx apache2-utils
+
+    # 检查 Nginx 状态
+    check_nginx
 
     # 配置防火墙
     echo "配置防火墙规则..."
@@ -356,6 +394,10 @@ EOF
 server {
     listen 80;
     server_name _;
+    
+    # 添加访问日志以便调试
+    access_log /var/log/nginx/hysteria-subscribe-access.log;
+    error_log /var/log/nginx/hysteria-subscribe-error.log;
 
     location /${SUBSCRIBE_PATH}/clash {
         auth_basic "Subscribe Authentication";
@@ -375,8 +417,34 @@ server {
 }
 EOF
 
+    # 测试 Nginx 配置
+    if ! nginx -t; then
+        echo "Nginx 配置测试失败，请检查配置文件"
+        return 1
+    fi
+
     # 重启 Nginx
     systemctl restart nginx
+    
+    # 验证 Nginx 是否成功重启
+    if ! systemctl is-active nginx >/dev/null 2>&1; then
+        echo "警告：Nginx 重启失败，正在尝试修复..."
+        systemctl start nginx
+        if ! systemctl is-active nginx >/dev/null 2>&1; then
+            echo "错误：Nginx 服务无法启动，请检查日志：journalctl -u nginx"
+            return 1
+        fi
+    fi
+
+    # 测试订阅文件是否可访问
+    echo "测试订阅链接可访问性..."
+    if ! curl -s -I "http://localhost/${SUBSCRIBE_PATH}/clash" | grep -q "401 Unauthorized"; then
+        echo "警告：订阅链接可能无法正常访问，请检查 Nginx 配置"
+        echo "Nginx 错误日志："
+        tail -n 10 /var/log/nginx/error.log
+    else
+        echo "订阅链接测试正常（需要认证）"
+    fi
 
     # 保存订阅信息
     cat > /etc/hysteria/subscribe/info.txt << EOF

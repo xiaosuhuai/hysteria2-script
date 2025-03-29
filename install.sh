@@ -168,8 +168,53 @@ check_nginx() {
     systemctl status nginx --no-pager
 }
 
+# 安装前清理检查函数
+pre_install_check() {
+    echo "执行安装前检查..."
+    
+    # 检查是否存在旧的 Hysteria 服务
+    if systemctl is-active hysteria-server >/dev/null 2>&1; then
+        echo "发现正在运行的 Hysteria 服务，正在停止..."
+        systemctl stop hysteria-server
+        systemctl disable hysteria-server
+    fi
+    
+    # 检查并删除旧的配置文件
+    if [ -d "/etc/hysteria" ]; then
+        echo "发现旧的配置文件，正在清理..."
+        rm -rf /etc/hysteria
+    fi
+    
+    # 检查并删除旧的服务文件
+    if [ -f "/etc/systemd/system/hysteria-server.service" ]; then
+        echo "清理旧的服务文件..."
+        rm -f /etc/systemd/system/hysteria-server.service
+        systemctl daemon-reload
+    fi
+    
+    # 检查并删除旧的 Nginx 配置
+    if [ -f "/etc/nginx/conf.d/hysteria-subscribe.conf" ]; then
+        echo "清理旧的 Nginx 配置..."
+        rm -f /etc/nginx/conf.d/hysteria-subscribe.conf
+        rm -f /etc/nginx/.htpasswd
+        systemctl restart nginx
+    fi
+    
+    # 检查并终止所有 hysteria 进程
+    if pgrep hysteria >/dev/null; then
+        echo "终止残留的 Hysteria 进程..."
+        pkill -9 hysteria
+        sleep 2
+    fi
+    
+    echo "清理完成，准备开始安装..."
+}
+
 # 安装函数
 install_hysteria() {
+    # 执行安装前检查
+    pre_install_check
+    
     # 设置变量
     SERVER_IP=$(curl -s https://api.ipify.org) # 自动获取服务器公网IP
     echo "检测到服务器IP: $SERVER_IP"

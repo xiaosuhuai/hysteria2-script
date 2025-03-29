@@ -195,8 +195,37 @@ else
     echo "3. 查看完整日志：journalctl -u hysteria-server -n 50"
 fi
 
-# 生成 Hysteria 2 URI
-HY2_URI="hy2://${SERVER_IP}:${USER_PORT}?insecure=1&password=${USER_PASSWORD}#Hysteria2"
+# 生成订阅链接
+VMESS_NAME="Hysteria2-${SERVER_IP}"
+CLASH_CONFIG=$(cat << EOF
+proxies:
+  - name: "$VMESS_NAME"
+    type: hysteria2
+    server: ${SERVER_IP}
+    port: ${USER_PORT}
+    password: "${USER_PASSWORD}"
+    sni: ${SERVER_IP}
+    skip-cert-verify: true
+
+proxy-groups:
+  - name: "🚀 节点选择"
+    type: select
+    proxies:
+      - "$VMESS_NAME"
+      - DIRECT
+
+rules:
+  - MATCH,🚀 节点选择
+EOF
+)
+
+QUANX_CONFIG="hysteria2=${SERVER_IP}:${USER_PORT}, password=${USER_PASSWORD}, skip-cert-verify=true, sni=${SERVER_IP}, tag=Hysteria2-${SERVER_IP}"
+
+# 保存订阅链接
+mkdir -p /etc/hysteria/subscribe
+echo "$CLASH_CONFIG" > /etc/hysteria/subscribe/clash.yaml
+echo "$QUANX_CONFIG" > /etc/hysteria/subscribe/quanx.conf
+
 echo -e "\nHysteria 2 安装完成！"
 echo "配置文件位置：/etc/hysteria/config.yaml"
 echo -e "\n=== 连接信息 ==="
@@ -212,13 +241,15 @@ elif command -v firewall-cmd >/dev/null 2>&1; then
 else
     iptables -L | grep ${USER_PORT}
 fi
-echo -e "\n=== 订阅链接 ==="
-echo "$HY2_URI"
-echo -e "\n提示：由于使用自签名证书，客户端需要设置 insecure=1"
 
-# 保存订阅链接到文件
-echo "$HY2_URI" > /etc/hysteria/subscription.txt
-echo "订阅链接已保存到：/etc/hysteria/subscription.txt"
+echo -e "\n=== 订阅信息 ==="
+echo "Clash 配置文件已保存到：/etc/hysteria/subscribe/clash.yaml"
+echo "QuantumultX 配置文件已保存到：/etc/hysteria/subscribe/quanx.conf"
+echo -e "\n=== Clash 配置示例 ==="
+echo "$CLASH_CONFIG"
+echo -e "\n=== QuantumultX 配置示例 ==="
+echo "$QUANX_CONFIG"
+echo -e "\n提示：由于使用自签名证书，客户端需要开启跳过证书验证"
 
 # 显示服务管理命令
 echo -e "\n=== 服务管理命令 ==="

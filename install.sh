@@ -566,12 +566,13 @@ EOF
 
     # 测试订阅文件是否可访问
     echo "测试订阅链接可访问性..."
-    if ! curl -s -I "http://localhost/${SUBSCRIBE_PATH}/clash" | grep -q "401 Unauthorized"; then
+    TEST_RESPONSE=$(curl -s -u "${SUBSCRIBE_USER}:${SUBSCRIBE_PASS}" "http://localhost/${SUBSCRIBE_PATH}/clash")
+    if echo "$TEST_RESPONSE" | grep -q "proxies:"; then
+        echo "订阅链接测试正常（配置文件可以正常访问）"
+    else
         echo "警告：订阅链接可能无法正常访问，请检查 Nginx 配置"
         echo "Nginx 错误日志："
         tail -n 10 /var/log/nginx/error.log
-    else
-        echo "订阅链接测试正常（需要认证）"
     fi
 
     # 保存订阅信息

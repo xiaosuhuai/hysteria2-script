@@ -172,7 +172,6 @@ query_subscription() {
         cat /etc/hysteria/subscribe/info.txt
         echo -e "\n配置文件位置："
         echo "Clash: /etc/hysteria/subscribe/clash.yaml"
-        echo "QuantumultX: /etc/hysteria/subscribe/quanx.conf"
         
         # 显示服务状态
         echo -e "\n=== 服务状态 ==="
@@ -448,20 +447,9 @@ proxy-groups:
       - DIRECT
 
 rules:
-  - MATCH,🚀 节点选择
+  - MATCH,�� 节点选择
 EOF
 )
-
-    # 生成 QuantumultX 配置，添加标准格式的注释和配置
-    cat > /etc/hysteria/subscribe/quanx.conf << EOF
-# Hysteria2 节点配置片段
-# 更新时间：$(date '+%Y-%m-%d %H:%M:%S')
-# 配置说明：此配置由脚本自动生成，适用于 QuantumultX
-# 使用方法：将此配置添加到 QuantumultX 的配置文件中
-# 注意事项：由于使用自签名证书，需要在客户端开启 skip-cert-verify
-
-;hysteria2=${SERVER_IP}:${USER_PORT}, password=${USER_PASSWORD}, skip-cert-verify=true, sni=${SERVER_IP}, tag=Hysteria2-${SERVER_IP}
-EOF
 
     # 创建订阅目录
     mkdir -p /etc/hysteria/subscribe
@@ -483,20 +471,6 @@ server {
         default_type text/plain;
         add_header Content-Type 'text/plain; charset=utf-8';
         return 200 '${CLASH_CONFIG}';
-    }
-
-    location /${SUBSCRIBE_PATH}/quanx {
-        auth_basic "Subscribe Authentication";
-        auth_basic_user_file /etc/nginx/.htpasswd;
-        default_type text/plain;
-        add_header Content-Type 'text/plain; charset=utf-8';
-        return 200 '# Hysteria2 节点配置片段
-# 更新时间：$(date "+%Y-%m-%d %H:%M:%S")
-# 配置说明：此配置由脚本自动生成，适用于 QuantumultX
-# 使用方法：将此配置添加到 QuantumultX 的配置文件中
-# 注意事项：由于使用自签名证书，需要在客户端开启 skip-cert-verify
-
-;hysteria2=${SERVER_IP}:${USER_PORT}, password=${USER_PASSWORD}, skip-cert-verify=true, sni=${SERVER_IP}, tag=Hysteria2-${SERVER_IP}';
     }
 }
 EOF
@@ -535,7 +509,8 @@ EOF
 订阅用户名：${SUBSCRIBE_USER}
 订阅密码：${SUBSCRIBE_PASS}
 Clash 订阅链接：http://${SERVER_IP}/${SUBSCRIBE_PATH}/clash
-QuantumultX 订阅链接：http://${SERVER_IP}/${SUBSCRIBE_PATH}/quanx
+
+注意：目前 QuantumultX 不支持 Hysteria2 协议
 EOF
 
     # 创建查询脚本
@@ -547,7 +522,6 @@ if [ -f "/etc/hysteria/subscribe/info.txt" ]; then
     cat /etc/hysteria/subscribe/info.txt
     echo -e "\n配置文件位置："
     echo "Clash: /etc/hysteria/subscribe/clash.yaml"
-    echo "QuantumultX: /etc/hysteria/subscribe/quanx.conf"
 else
     echo "未找到订阅信息，请确认是否已安装 Hysteria 2"
 fi
@@ -567,12 +541,12 @@ EOF
     echo "订阅密码：$SUBSCRIBE_PASS"
     echo -e "\n=== 订阅链接 ==="
     echo "Clash 订阅链接：http://${SERVER_IP}/${SUBSCRIBE_PATH}/clash"
-    echo "QuantumultX 订阅链接：http://${SERVER_IP}/${SUBSCRIBE_PATH}/quanx"
     echo -e "\n提示："
     echo "1. 订阅链接需要使用用户名和密码认证"
     echo "2. 由于使用自签名证书，客户端需要开启跳过证书验证"
     echo "3. 订阅信息已保存到：/etc/hysteria/subscribe/"
     echo "4. 使用 'hy2sub' 命令可随时查看订阅信息"
+    echo "5. 注意：目前 QuantumultX 不支持 Hysteria2 协议"
 }
 
 # 主菜单循环

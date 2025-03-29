@@ -282,7 +282,7 @@ install_hysteria() {
 
     # 安装必要的软件包
     apt update
-    apt install -y curl openssl net-tools lsof nginx apache2-utils
+    apt install -y curl openssl net-tools lsof nginx apache2-utils qrencode
 
     # 检查 Nginx 状态
     check_nginx
@@ -522,6 +522,15 @@ if [ -f "/etc/hysteria/subscribe/info.txt" ]; then
     cat /etc/hysteria/subscribe/info.txt
     echo -e "\n配置文件位置："
     echo "Clash: /etc/hysteria/subscribe/clash.yaml"
+    
+    # 获取订阅链接
+    SUBSCRIBE_LINK=$(grep "Clash 订阅链接：" /etc/hysteria/subscribe/info.txt | cut -d' ' -f2)
+    
+    if [ ! -z "$SUBSCRIBE_LINK" ]; then
+        echo -e "\n=== 订阅二维码 ==="
+        echo "扫描下方二维码可直接导入配置："
+        qrencode -t ANSIUTF8 "$SUBSCRIBE_LINK"
+    fi
 else
     echo "未找到订阅信息，请确认是否已安装 Hysteria 2"
 fi
@@ -541,6 +550,11 @@ EOF
     echo "订阅密码：$SUBSCRIBE_PASS"
     echo -e "\n=== 订阅链接 ==="
     echo "Clash 订阅链接：http://${SERVER_IP}/${SUBSCRIBE_PATH}/clash"
+    echo -e "\n=== 订阅二维码 ==="
+    echo "扫描下方二维码可直接导入配置："
+    SUBSCRIBE_LINK="http://${SERVER_IP}/${SUBSCRIBE_PATH}/clash"
+    qrencode -t ANSIUTF8 "$SUBSCRIBE_LINK"
+    
     echo -e "\n提示："
     echo "1. 订阅链接需要使用用户名和密码认证"
     echo "2. 由于使用自签名证书，客户端需要开启跳过证书验证"

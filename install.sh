@@ -67,7 +67,7 @@ fi
 
 # 安装必要的软件包
 apt update
-apt install -y curl openssl net-tools lsof
+apt install -y curl openssl net-tools lsof nginx apache2-utils
 
 # 配置防火墙
 echo "配置防火墙规则..."
@@ -196,7 +196,19 @@ else
 fi
 
 # 生成订阅链接
+SUBSCRIBE_PATH=$(openssl rand -hex 16)
 VMESS_NAME="Hysteria2-${SERVER_IP}"
+
+# 生成订阅密码
+SUBSCRIBE_USER="user_$(openssl rand -hex 4)"
+SUBSCRIBE_PASS=$(openssl rand -base64 8)
+echo "订阅用户名：$SUBSCRIBE_USER"
+echo "订阅密码：$SUBSCRIBE_PASS"
+
+# 创建认证文件
+htpasswd -bc /etc/nginx/.htpasswd "$SUBSCRIBE_USER" "$SUBSCRIBE_PASS"
+
+# 生成配置文件
 CLASH_CONFIG=$(cat << EOF
 proxies:
   - name: "$VMESS_NAME"
@@ -221,10 +233,37 @@ EOF
 
 QUANX_CONFIG="hysteria2=${SERVER_IP}:${USER_PORT}, password=${USER_PASSWORD}, skip-cert-verify=true, sni=${SERVER_IP}, tag=Hysteria2-${SERVER_IP}"
 
-# 保存订阅链接
+# 创建订阅目录
 mkdir -p /etc/hysteria/subscribe
 echo "$CLASH_CONFIG" > /etc/hysteria/subscribe/clash.yaml
 echo "$QUANX_CONFIG" > /etc/hysteria/subscribe/quanx.conf
+
+# 配置 Nginx
+cat > /etc/nginx/conf.d/hysteria-subscribe.conf << EOF
+server {
+    listen 80;
+    server_name _;
+
+    location /${SUBSCRIBE_PATH}/clash {
+        auth_basic "Subscribe Authentication";
+        auth_basic_user_file /etc/nginx/.htpasswd;
+        alias /etc/hysteria/subscribe/clash.yaml;
+        default_type text/plain;
+        add_header Content-Type 'text/plain; charset=utf-8';
+    }
+
+    location /${SUBSCRIBE_PATH}/quanx {
+        auth_basic "Subscribe Authentication";
+        auth_basic_user_file /etc/nginx/.htpasswd;
+        alias /etc/hysteria/subscribe/quanx.conf;
+        default_type text/plain;
+        add_header Content-Type 'text/plain; charset=utf-8';
+    }
+}
+EOF
+
+# 重启 Nginx
+systemctl restart nginx
 
 echo -e "\nHysteria 2 安装完成！"
 echo "配置文件位置：/etc/hysteria/config.yaml"
@@ -235,21 +274,35 @@ echo "密码：${USER_PASSWORD}"
 echo -e "\n=== 防火墙状态 ==="
 # 检查防火墙端口状态
 if command -v ufw >/dev/null 2>&1; then
-    ufw status | grep ${USER_PORT}
+    ufw allow 80/tcp
+    ufw status | grep -E "${USER_PORT}|80"
 elif command -v firewall-cmd >/dev/null 2>&1; then
-    firewall-cmd --list-ports | grep ${USER_PORT}
+    firewall-cmd --permanent --add-port=80/tcp
+    firewall-cmd --reload
+    firewall-cmd --list-ports | grep -E "${USER_PORT}|80"
 else
-    iptables -L | grep ${USER_PORT}
+    iptables -I INPUT -p tcp --dport 80 -j ACCEPT
+    iptables -L | grep -E "${USER_PORT}|80"
 fi
 
 echo -e "\n=== 订阅信息 ==="
-echo "Clash 配置文件已保存到：/etc/hysteria/subscribe/clash.yaml"
-echo "QuantumultX 配置文件已保存到：/etc/hysteria/subscribe/quanx.conf"
-echo -e "\n=== Clash 配置示例 ==="
-echo "$CLASH_CONFIG"
-echo -e "\n=== QuantumultX 配置示例 ==="
-echo "$QUANX_CONFIG"
-echo -e "\n提示：由于使用自签名证书，客户端需要开启跳过证书验证"
+echo "订阅用户名：$SUBSCRIBE_USER"
+echo "订阅密码：$SUBSCRIBE_PASS"
+echo -e "\n=== 订阅链接 ==="
+echo "Clash 订阅链接：http://${SERVER_IP}/${SUBSCRIBE_PATH}/clash"
+echo "QuantumultX 订阅链接：http://${SERVER_IP}/${SUBSCRIBE_PATH}/quanx"
+echo -e "\n提示："
+echo "1. 订阅链接需要使用用户名和密码认证"
+echo "2. 由于使用自签名证书，客户端需要开启跳过证书验证"
+echo "3. 订阅信息已保存到：/etc/hysteria/subscribe/"
+
+# 保存订阅信息
+cat > /etc/hysteria/subscribe/info.txt << EOF
+订阅用户名：${SUBSCRIBE_USER}
+订阅密码：${SUBSCRIBE_PASS}
+Clash 订阅链接：http://${SERVER_IP}/${SUBSCRIBE_PATH}/clash
+QuantumultX 订阅链接：http://${SERVER_IP}/${SUBSCRIBE_PATH}/quanx
+EOF
 
 # 显示服务管理命令
 echo -e "\n=== 服务管理命令 ==="

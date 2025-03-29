@@ -529,12 +529,20 @@ rules:
 EOF
 )
 
-    QUANX_CONFIG="hysteria2=${SERVER_IP}:${USER_PORT}, password=${USER_PASSWORD}, skip-cert-verify=true, sni=${SERVER_IP}, tag=Hysteria2-${SERVER_IP}"
+    # 生成 QuantumultX 配置，添加标准格式的注释和配置
+    cat > /etc/hysteria/subscribe/quanx.conf << EOF
+# Hysteria2 节点配置片段
+# 更新时间：$(date '+%Y-%m-%d %H:%M:%S')
+# 配置说明：此配置由脚本自动生成，适用于 QuantumultX
+# 使用方法：将此配置添加到 QuantumultX 的配置文件中
+# 注意事项：由于使用自签名证书，需要在客户端开启 skip-cert-verify
+
+;hysteria2=${SERVER_IP}:${USER_PORT}, password=${USER_PASSWORD}, skip-cert-verify=true, sni=${SERVER_IP}, tag=Hysteria2-${SERVER_IP}
+EOF
 
     # 创建订阅目录
     mkdir -p /etc/hysteria/subscribe
     echo "$CLASH_CONFIG" > /etc/hysteria/subscribe/clash.yaml
-    echo "$QUANX_CONFIG" > /etc/hysteria/subscribe/quanx.conf
 
     # 配置 Nginx
     cat > /etc/nginx/conf.d/hysteria-subscribe.conf << EOF

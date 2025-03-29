@@ -304,6 +304,26 @@ Clash 订阅链接：http://${SERVER_IP}/${SUBSCRIBE_PATH}/clash
 QuantumultX 订阅链接：http://${SERVER_IP}/${SUBSCRIBE_PATH}/quanx
 EOF
 
+# 创建查询脚本
+cat > /usr/local/bin/hy2sub << 'EOF'
+#!/bin/bash
+
+if [ -f "/etc/hysteria/subscribe/info.txt" ]; then
+    echo "=== Hysteria 2 订阅信息 ==="
+    cat /etc/hysteria/subscribe/info.txt
+    echo -e "\n配置文件位置："
+    echo "Clash: /etc/hysteria/subscribe/clash.yaml"
+    echo "QuantumultX: /etc/hysteria/subscribe/quanx.conf"
+else
+    echo "未找到订阅信息，请确认是否已安装 Hysteria 2"
+fi
+EOF
+
+chmod +x /usr/local/bin/hy2sub
+
+echo -e "\n=== 查询命令 ==="
+echo "使用 'hy2sub' 命令可随时查看订阅信息"
+
 # 显示服务管理命令
 echo -e "\n=== 服务管理命令 ==="
 echo "启动服务：systemctl start hysteria-server"

@@ -557,17 +557,23 @@ server {
     location /${SUBSCRIBE_PATH}/clash {
         auth_basic "Subscribe Authentication";
         auth_basic_user_file /etc/nginx/.htpasswd;
-        alias /etc/hysteria/subscribe/clash.yaml;
         default_type text/plain;
         add_header Content-Type 'text/plain; charset=utf-8';
+        return 200 '${CLASH_CONFIG}';
     }
 
     location /${SUBSCRIBE_PATH}/quanx {
         auth_basic "Subscribe Authentication";
         auth_basic_user_file /etc/nginx/.htpasswd;
-        alias /etc/hysteria/subscribe/quanx.conf;
         default_type text/plain;
         add_header Content-Type 'text/plain; charset=utf-8';
+        return 200 '# Hysteria2 节点配置片段
+# 更新时间：$(date "+%Y-%m-%d %H:%M:%S")
+# 配置说明：此配置由脚本自动生成，适用于 QuantumultX
+# 使用方法：将此配置添加到 QuantumultX 的配置文件中
+# 注意事项：由于使用自签名证书，需要在客户端开启 skip-cert-verify
+
+;hysteria2=${SERVER_IP}:${USER_PORT}, password=${USER_PASSWORD}, skip-cert-verify=true, sni=${SERVER_IP}, tag=Hysteria2-${SERVER_IP}';
     }
 }
 EOF

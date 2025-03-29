@@ -11,6 +11,14 @@ HYSTERIA_VERSION="v2.6.1"
 SERVER_IP=$(curl -s https://api.ipify.org) # 自动获取服务器公网IP
 echo "检测到服务器IP: $SERVER_IP"
 
+# 提示用户输入密码
+read -p "请设置访问密码 (如果直接回车将生成随机密码): " USER_PASSWORD
+if [ -z "$USER_PASSWORD" ]; then
+    # 生成随机密码 (16位字母数字组合)
+    USER_PASSWORD=$(openssl rand -base64 12)
+    echo "已生成随机密码: $USER_PASSWORD"
+fi
+
 # 安装必要的软件包
 apt update
 apt install -y curl openssl
@@ -73,7 +81,7 @@ listen: :443
 
 auth:
   type: password
-  password: Suhuai666
+  password: ${USER_PASSWORD}
 
 masquerade:
   type: proxy
@@ -118,14 +126,14 @@ systemctl start hysteria-server
 systemctl status hysteria-server
 
 # 生成 Hysteria 2 URI
-HY2_URI="hy2://${SERVER_IP}:443?insecure=1&password=Suhuai666#Hysteria2"
+HY2_URI="hy2://${SERVER_IP}:443?insecure=1&password=${USER_PASSWORD}#Hysteria2"
 echo -e "\nHysteria 2 安装完成！"
 echo "请检查服务状态确保正常运行。"
 echo "配置文件位置：/etc/hysteria/config.yaml"
 echo -e "\n=== 连接信息 ==="
 echo "服务器IP：$SERVER_IP"
 echo "端口：443"
-echo "密码：Suhuai666"
+echo "密码：${USER_PASSWORD}"
 echo -e "\n=== 防火墙状态 ==="
 # 检查防火墙端口状态
 if command -v ufw >/dev/null 2>&1; then

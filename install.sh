@@ -433,8 +433,8 @@ EOF
     FULL_SUBSCRIBE_URL="http://${SUBSCRIBE_USER}:${SUBSCRIBE_PASS}@${SERVER_IP}/${SUBSCRIBE_PATH}/clash"
     
     # Base64 编码处理订阅地址（用于小火箭）
-    BASE64_URL=$(echo -n "$FULL_SUBSCRIBE_URL" | base64)
-    SHADOWROCKET_URL="sub://${BASE64_URL}"
+    BASE64_URL=$(echo -n "${FULL_SUBSCRIBE_URL}" | base64 | tr -d '\n')
+    SHADOWROCKET_URL="sub://${BASE64_URL}#Hysteria2-${SERVER_IP}"
 
     # 生成配置文件
     CLASH_CONFIG=$(cat << EOF
@@ -599,9 +599,11 @@ EOF
 
     # 测试订阅文件是否可访问
     echo "测试订阅链接可访问性..."
-    TEST_RESPONSE=$(curl -s -u "${SUBSCRIBE_USER}:${SUBSCRIBE_PASS}" "http://localhost/${SUBSCRIBE_PATH}/clash")
-    if echo "$TEST_RESPONSE" | grep -q "proxies:"; then
-        echo "订阅链接测试正常（配置文件可以正常访问）"
+    if curl -s -I -u "${SUBSCRIBE_USER}:${SUBSCRIBE_PASS}" "http://localhost/${SUBSCRIBE_PATH}/clash" | grep -q "200 OK"; then
+        echo "订阅链接测试正常（HTTP 状态码：200）"
+        if curl -s -u "${SUBSCRIBE_USER}:${SUBSCRIBE_PASS}" "http://localhost/${SUBSCRIBE_PATH}/clash" | grep -q "proxies:"; then
+            echo "配置文件内容验证正常"
+        fi
     else
         echo "警告：订阅链接可能无法正常访问，请检查 Nginx 配置"
         echo "Nginx 错误日志："

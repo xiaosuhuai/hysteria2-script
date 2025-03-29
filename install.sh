@@ -140,13 +140,19 @@ systemctl daemon-reload
 systemctl enable hysteria-server
 systemctl start hysteria-server
 
-# 检查服务状态
-systemctl status hysteria-server
+# 检查服务状态（使用非交互式方式）
+echo -e "\n=== 服务状态 ==="
+systemctl is-active hysteria-server > /dev/null 2>&1
+if [ $? -eq 0 ]; then
+    echo "Hysteria 服务已成功启动并正在运行"
+else
+    echo "警告：Hysteria 服务可能未正常运行，请检查日志"
+    echo "查看日志命令：journalctl -u hysteria-server -n 50"
+fi
 
 # 生成 Hysteria 2 URI
 HY2_URI="hy2://${SERVER_IP}:${USER_PORT}?insecure=1&password=${USER_PASSWORD}#Hysteria2"
 echo -e "\nHysteria 2 安装完成！"
-echo "请检查服务状态确保正常运行。"
 echo "配置文件位置：/etc/hysteria/config.yaml"
 echo -e "\n=== 连接信息 ==="
 echo "服务器IP：$SERVER_IP"
@@ -167,4 +173,12 @@ echo -e "\n提示：由于使用自签名证书，客户端需要设置 insecure
 
 # 保存订阅链接到文件
 echo "$HY2_URI" > /etc/hysteria/subscription.txt
-echo "订阅链接已保存到：/etc/hysteria/subscription.txt" 
+echo "订阅链接已保存到：/etc/hysteria/subscription.txt"
+
+# 显示服务管理命令
+echo -e "\n=== 服务管理命令 ==="
+echo "启动服务：systemctl start hysteria-server"
+echo "停止服务：systemctl stop hysteria-server"
+echo "重启服务：systemctl restart hysteria-server"
+echo "查看状态：systemctl status hysteria-server"
+echo "查看日志：journalctl -u hysteria-server -n 50" 

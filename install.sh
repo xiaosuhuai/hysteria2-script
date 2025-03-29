@@ -117,12 +117,28 @@ openssl req -x509 -nodes -newkey rsa:2048 -days 365 \
 chmod 644 /etc/hysteria/cert.crt
 chmod 600 /etc/hysteria/private.key
 
+# 检测系统架构
+ARCH=$(uname -m)
+case $ARCH in
+    x86_64)  ARCH="amd64" ;;
+    aarch64) ARCH="arm64" ;;
+    armv7l)  ARCH="arm" ;;
+    *)       echo "不支持的系统架构: $ARCH" && exit 1 ;;
+esac
+
 # 下载并安装 Hysteria 2
 echo "下载 Hysteria 2..."
-curl -Lo hysteria https://github.com/apernet/hysteria/releases/download/$HYSTERIA_VERSION/hysteria-linux-amd64
+DOWNLOAD_URL="https://github.com/apernet/hysteria/releases/download/${HYSTERIA_VERSION}/hysteria-linux-${ARCH}"
+BACKUP_URL="https://ghproxy.com/https://github.com/apernet/hysteria/releases/download/${HYSTERIA_VERSION}/hysteria-linux-${ARCH}"
+
+curl -Lo hysteria "$DOWNLOAD_URL"
 if [ $? -ne 0 ]; then
-    echo "下载失败，尝试使用代理下载..."
-    curl -Lo hysteria https://ghproxy.com/https://github.com/apernet/hysteria/releases/download/$HYSTERIA_VERSION/hysteria-linux-amd64
+    echo "直接下载失败，尝试使用代理下载..."
+    curl -Lo hysteria "$BACKUP_URL"
+    if [ $? -ne 0 ]; then
+        echo "下载失败，请检查网络连接或手动下载：$DOWNLOAD_URL"
+        exit 1
+    fi
 fi
 
 chmod +x hysteria

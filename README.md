@@ -88,4 +88,4 @@ journalctl -u hysteria-server
 
 ## 许可证
 
-MIT License 
+MIT License

@@ -153,10 +153,53 @@ check_nginx() {
         echo "Nginx 未安装，正在安装..."
         apt update
         apt install -y nginx
+        
+        # 如果安装失败，尝试修复
+        if [ $? -ne 0 ]; then
+            echo "Nginx 安装失败，尝试修复..."
+            apt --fix-broken install -y
+            apt update
+            apt install -y nginx
+        fi
     fi
     
-    # 确保 nginx 目录存在
+    # 确保配置文件存在
+    if [ ! -f "/etc/nginx/nginx.conf" ]; then
+        echo "创建 Nginx 默认配置文件..."
+        cat > /etc/nginx/nginx.conf << 'EOF'
+user www-data;
+worker_processes auto;
+pid /run/nginx.pid;
+include /etc/nginx/modules-enabled/*.conf;
+
+events {
+    worker_connections 768;
+}
+
+http {
+    sendfile on;
+    tcp_nopush on;
+    types_hash_max_size 2048;
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+    ssl_protocols TLSv1 TLSv1.1 TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers on;
+    access_log /var/log/nginx/access.log;
+    error_log /var/log/nginx/error.log;
+    gzip on;
+    include /etc/nginx/conf.d/*.conf;
+    include /etc/nginx/sites-enabled/*;
+}
+EOF
+    fi
+    
+    # 确保必要的目录存在
     mkdir -p /etc/nginx/conf.d
+    mkdir -p /etc/nginx/sites-enabled
+    mkdir -p /var/log/nginx
+    
+    # 设置正确的权限
+    chown -R www-data:www-data /var/log/nginx
     
     # 备份默认配置
     if [ -f "/etc/nginx/sites-enabled/default" ]; then
@@ -164,12 +207,21 @@ check_nginx() {
     fi
     
     # 测试配置文件
+    echo "测试 Nginx 配置..."
     nginx -t
     
-    # 检查服务状态
+    # 检查服务状态并尝试启动
     if ! systemctl is-active nginx >/dev/null 2>&1; then
         echo "Nginx 服务未运行，正在启动..."
         systemctl start nginx
+        sleep 2
+        
+        # 如果启动失败，尝试修复
+        if ! systemctl is-active nginx >/dev/null 2>&1; then
+            echo "Nginx 启动失败，尝试修复..."
+            systemctl reset-failed nginx
+            systemctl start nginx
+        fi
     fi
     
     # 确保服务开机自启

@@ -127,7 +127,7 @@ if ! command -v hysteria >/dev/null 2>&1; then
 fi
 
 echo "验证 Hysteria 2 版本..."
-hysteria --version
+hysteria version
 
 # 创建配置文件
 cat > /etc/hysteria/config.yaml << EOF

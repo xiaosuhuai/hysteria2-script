@@ -475,23 +475,14 @@ EOF
     echo "$CLASH_CONFIG" > /etc/hysteria/subscribe/clash.yaml
 
     # 配置 Nginx
-    cat > /etc/nginx/conf.d/hysteria-subscribe.conf << EOF
+    cat > /etc/nginx/conf.d/default.conf << EOF
 server {
     listen 80 default_server;
-    server_name $SERVER_IP;
+    server_name _;
+    charset utf-8;
     
-    # 添加访问日志以便调试
-    access_log /var/log/nginx/hysteria-subscribe-access.log;
-    error_log /var/log/nginx/hysteria-subscribe-error.log;
-
-    location /${SUBSCRIBE_PATH}/clash {
-        auth_basic "Subscribe Authentication";
-        auth_basic_user_file /etc/nginx/.htpasswd;
-        default_type text/plain;
-        charset utf-8;
-        add_header Content-Type 'text/plain; charset=utf-8';
-        return 200 '${CLASH_CONFIG}';
-    }
+    access_log /var/log/nginx/default-access.log;
+    error_log /var/log/nginx/default-error.log;
 
     location / {
         return 404;
@@ -499,8 +490,60 @@ server {
 }
 EOF
 
+    cat > /etc/nginx/conf.d/hysteria-subscribe.conf << EOF
+server {
+    listen 80;
+    server_name ${SERVER_IP};
+    charset utf-8;
+    
+    access_log /var/log/nginx/hysteria-subscribe-access.log;
+    error_log /var/log/nginx/hysteria-subscribe-error.log;
+
+    location /${SUBSCRIBE_PATH}/clash {
+        auth_basic "Subscribe Authentication";
+        auth_basic_user_file /etc/nginx/.htpasswd;
+        default_type text/plain;
+        add_header Content-Type 'text/plain; charset=utf-8';
+        return 200 '${CLASH_CONFIG}';
+    }
+}
+EOF
+
     # 移除默认的 Nginx 配置
     rm -f /etc/nginx/sites-enabled/default
+    rm -f /etc/nginx/sites-available/default
+
+    # 简化主配置文件
+    cat > /etc/nginx/nginx.conf << EOF
+user www-data;
+worker_processes auto;
+pid /run/nginx.pid;
+
+events {
+    worker_connections 768;
+}
+
+http {
+    sendfile on;
+    tcp_nopush on;
+    tcp_nodelay on;
+    keepalive_timeout 65;
+    types_hash_max_size 2048;
+
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers on;
+
+    access_log /var/log/nginx/access.log;
+    error_log /var/log/nginx/error.log;
+
+    gzip on;
+
+    include /etc/nginx/conf.d/*.conf;
+}
+EOF
 
     # 测试 Nginx 配置
     if ! nginx -t; then

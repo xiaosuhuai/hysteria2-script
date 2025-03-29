@@ -447,7 +447,7 @@ proxy-groups:
       - DIRECT
 
 rules:
-  - MATCH,�� 节点选择
+  - MATCH,🚀 节点选择
 EOF
 )
 
@@ -547,6 +547,15 @@ EOF
     echo "3. 订阅信息已保存到：/etc/hysteria/subscribe/"
     echo "4. 使用 'hy2sub' 命令可随时查看订阅信息"
     echo "5. 注意：目前 QuantumultX 不支持 Hysteria2 协议"
+    echo -e "\n=== iOS 客户端支持 ==="
+    echo "支持的客户端（版本要求）："
+    echo "1. Shadowrocket (v2.2.35+) - 推荐，性价比高"
+    echo "2. Stash (v2.5.0+)"
+    echo "3. Loon (v3.1.3+)"
+    echo "4. Surge (v5.8.0+)"
+    echo "5. Streisand (v1.5.6+)"
+    echo "6. Pharos Pro (v1.8.3+)"
+    echo "7. Egern (v1.14.0+)"
 }
 
 # 主菜单循环

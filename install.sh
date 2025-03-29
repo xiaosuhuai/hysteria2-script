@@ -21,6 +21,23 @@ check_port() {
             echo "占用进程信息："
             lsof -i :$port
         fi
+        
+        # 检查是否是 Hysteria 占用
+        if pgrep -f "hysteria.*:$port" >/dev/null; then
+            echo -e "\n检测到是 Hysteria 服务占用此端口"
+            read -p "是否停止 Hysteria 服务并继续安装？[Y/n]: " stop_service
+            if [[ $stop_service =~ ^[Yy]$ ]] || [[ -z $stop_service ]]; then
+                echo "正在停止 Hysteria 服务..."
+                systemctl stop hysteria-server
+                sleep 2
+                pkill -9 hysteria
+                sleep 1
+                if ! netstat -tuln | grep -q ":$port "; then
+                    echo "端口已释放，继续安装..."
+                    return 0
+                fi
+            fi
+        fi
         return 1
     fi
     return 0
@@ -41,20 +58,18 @@ while true; do
     fi
 
     # 检查端口占用
-    if ! check_port "$USER_PORT"; then
+    if check_port "$USER_PORT"; then
+        break
+    else
         echo "建议："
         echo "1. 使用其他未被占用的端口"
-        echo "2. 或者停止占用该端口的服务："
-        echo "   systemctl stop 服务名"
-        echo "3. 常用端口参考："
+        echo "2. 常用端口参考："
         echo "   8443, 9443, 2083, 2087, 2096, 8080, 8880, 9993"
         read -p "是否尝试其他端口？[Y/n]: " retry
         if [[ $retry =~ ^[Nn]$ ]]; then
             exit 1
         fi
-        continue
     fi
-    break
 done
 
 # 提示用户输入密码

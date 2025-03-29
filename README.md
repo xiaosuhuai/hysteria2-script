@@ -1,6 +1,10 @@
 # Hysteria 2 一键脚本
 
-一个适用于个人使用的 Hysteria 2 一键安装脚本。
+> A powerful, lightning fast and censorship resistant proxy.
+> 
+> by Aperture Internet Laboratory <https://github.com/apernet>
+
+一个适用于个人使用的 Hysteria 2 一键安装脚本。基于 Hysteria 2.6.1 版本。
 
 ## 功能特点
 

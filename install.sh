@@ -477,8 +477,8 @@ EOF
     # 配置 Nginx
     cat > /etc/nginx/conf.d/hysteria-subscribe.conf << EOF
 server {
-    listen 80;
-    server_name _;
+    listen 80 default_server;
+    server_name $SERVER_IP;
     
     # 添加访问日志以便调试
     access_log /var/log/nginx/hysteria-subscribe-access.log;
@@ -488,11 +488,19 @@ server {
         auth_basic "Subscribe Authentication";
         auth_basic_user_file /etc/nginx/.htpasswd;
         default_type text/plain;
+        charset utf-8;
         add_header Content-Type 'text/plain; charset=utf-8';
         return 200 '${CLASH_CONFIG}';
     }
+
+    location / {
+        return 404;
+    }
 }
 EOF
+
+    # 移除默认的 Nginx 配置
+    rm -f /etc/nginx/sites-enabled/default
 
     # 测试 Nginx 配置
     if ! nginx -t; then

@@ -11,23 +11,52 @@ HYSTERIA_VERSION="v2.6.1"
 SERVER_IP=$(curl -s https://api.ipify.org) # 自动获取服务器公网IP
 echo "检测到服务器IP: $SERVER_IP"
 
+# 检查并显示端口占用情况的函数
+check_port() {
+    local port=$1
+    echo "检查端口 $port 占用情况..."
+    if netstat -tuln | grep -q ":$port "; then
+        echo "端口 $port 已被占用，占用情况如下："
+        netstat -tuln | grep ":$port "
+        if lsof -i :$port >/dev/null 2>&1; then
+            echo "占用进程信息："
+            lsof -i :$port
+        fi
+        return 1
+    fi
+    return 0
+}
+
 # 提示用户输入端口
-read -p "请设置服务端口 (直接回车默认443): " USER_PORT
-if [ -z "$USER_PORT" ]; then
-    USER_PORT="443"
-    echo "使用默认端口: 443"
-else
+while true; do
+    read -p "请设置服务端口 (直接回车默认443): " USER_PORT
+    if [ -z "$USER_PORT" ]; then
+        USER_PORT="443"
+        echo "使用默认端口: 443"
+    fi
+
     # 检查端口是否为数字且在有效范围内
     if ! [[ "$USER_PORT" =~ ^[0-9]+$ ]] || [ "$USER_PORT" -lt 1 ] || [ "$USER_PORT" -gt 65535 ]; then
         echo "错误：端口必须是1-65535之间的数字"
-        exit 1
+        continue
     fi
-    # 检查端口是否已被占用
-    if netstat -tuln | grep -q ":$USER_PORT "; then
-        echo "错误：端口 $USER_PORT 已被占用"
-        exit 1
+
+    # 检查端口占用
+    if ! check_port "$USER_PORT"; then
+        echo "建议："
+        echo "1. 使用其他未被占用的端口"
+        echo "2. 或者停止占用该端口的服务："
+        echo "   systemctl stop 服务名"
+        echo "3. 常用端口参考："
+        echo "   8443, 9443, 2083, 2087, 2096, 8080, 8880, 9993"
+        read -p "是否尝试其他端口？[Y/n]: " retry
+        if [[ $retry =~ ^[Nn]$ ]]; then
+            exit 1
+        fi
+        continue
     fi
-fi
+    break
+done
 
 # 提示用户输入密码
 read -p "请设置访问密码 (如果直接回车将生成随机密码): " USER_PASSWORD
@@ -39,7 +68,7 @@ fi
 
 # 安装必要的软件包
 apt update
-apt install -y curl openssl net-tools
+apt install -y curl openssl net-tools lsof
 
 # 配置防火墙
 echo "配置防火墙规则..."
@@ -89,7 +118,13 @@ chmod 644 /etc/hysteria/cert.crt
 chmod 600 /etc/hysteria/private.key
 
 # 下载并安装 Hysteria 2
+echo "下载 Hysteria 2..."
 curl -Lo hysteria https://github.com/apernet/hysteria/releases/download/$HYSTERIA_VERSION/hysteria-linux-amd64
+if [ $? -ne 0 ]; then
+    echo "下载失败，尝试使用代理下载..."
+    curl -Lo hysteria https://ghproxy.com/https://github.com/apernet/hysteria/releases/download/$HYSTERIA_VERSION/hysteria-linux-amd64
+fi
+
 chmod +x hysteria
 mv hysteria /usr/local/bin/
 
@@ -138,16 +173,25 @@ EOF
 # 启动服务
 systemctl daemon-reload
 systemctl enable hysteria-server
+systemctl stop hysteria-server >/dev/null 2>&1
+sleep 2
 systemctl start hysteria-server
+
+# 等待服务启动
+echo "等待服务启动..."
+sleep 5
 
 # 检查服务状态（使用非交互式方式）
 echo -e "\n=== 服务状态 ==="
-systemctl is-active hysteria-server > /dev/null 2>&1
-if [ $? -eq 0 ]; then
+if systemctl is-active hysteria-server >/dev/null 2>&1; then
     echo "Hysteria 服务已成功启动并正在运行"
 else
-    echo "警告：Hysteria 服务可能未正常运行，请检查日志"
-    echo "查看日志命令：journalctl -u hysteria-server -n 50"
+    echo "警告：Hysteria 服务未能正常启动，错误日志如下："
+    journalctl -u hysteria-server -n 10 --no-pager
+    echo -e "\n可能的解决方案："
+    echo "1. 检查端口 ${USER_PORT} 是否被其他服务占用"
+    echo "2. 检查系统防火墙设置"
+    echo "3. 查看完整日志：journalctl -u hysteria-server -n 50"
 fi
 
 # 生成 Hysteria 2 URI

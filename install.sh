@@ -11,6 +11,24 @@ HYSTERIA_VERSION="v2.6.1"
 SERVER_IP=$(curl -s https://api.ipify.org) # 自动获取服务器公网IP
 echo "检测到服务器IP: $SERVER_IP"
 
+# 提示用户输入端口
+read -p "请设置服务端口 (直接回车默认443): " USER_PORT
+if [ -z "$USER_PORT" ]; then
+    USER_PORT="443"
+    echo "使用默认端口: 443"
+else
+    # 检查端口是否为数字且在有效范围内
+    if ! [[ "$USER_PORT" =~ ^[0-9]+$ ]] || [ "$USER_PORT" -lt 1 ] || [ "$USER_PORT" -gt 65535 ]; then
+        echo "错误：端口必须是1-65535之间的数字"
+        exit 1
+    fi
+    # 检查端口是否已被占用
+    if netstat -tuln | grep -q ":$USER_PORT "; then
+        echo "错误：端口 $USER_PORT 已被占用"
+        exit 1
+    fi
+fi
+
 # 提示用户输入密码
 read -p "请设置访问密码 (如果直接回车将生成随机密码): " USER_PASSWORD
 if [ -z "$USER_PASSWORD" ]; then
@@ -21,15 +39,15 @@ fi
 
 # 安装必要的软件包
 apt update
-apt install -y curl openssl
+apt install -y curl openssl net-tools
 
 # 配置防火墙
 echo "配置防火墙规则..."
 # 检查是否安装了 UFW
 if command -v ufw >/dev/null 2>&1; then
     # 配置 UFW
-    ufw allow 443/tcp
-    ufw allow 443/udp
+    ufw allow ${USER_PORT}/tcp
+    ufw allow ${USER_PORT}/udp
     # 如果 UFW 未启用，启用它
     if ! ufw status | grep -q "Status: active"; then
         ufw --force enable
@@ -37,8 +55,8 @@ if command -v ufw >/dev/null 2>&1; then
     echo "UFW 防火墙规则已配置"
 else
     # 使用 iptables
-    iptables -I INPUT -p tcp --dport 443 -j ACCEPT
-    iptables -I INPUT -p udp --dport 443 -j ACCEPT
+    iptables -I INPUT -p tcp --dport ${USER_PORT} -j ACCEPT
+    iptables -I INPUT -p udp --dport ${USER_PORT} -j ACCEPT
     # 保存 iptables 规则
     if command -v iptables-save >/dev/null 2>&1; then
         if [ -d "/etc/iptables" ]; then
@@ -52,8 +70,8 @@ fi
 
 # 对于 CentOS/RHEL 系统，配置 firewalld
 if command -v firewall-cmd >/dev/null 2>&1; then
-    firewall-cmd --permanent --add-port=443/tcp
-    firewall-cmd --permanent --add-port=443/udp
+    firewall-cmd --permanent --add-port=${USER_PORT}/tcp
+    firewall-cmd --permanent --add-port=${USER_PORT}/udp
     firewall-cmd --reload
     echo "firewalld 防火墙规则已配置"
 fi
@@ -77,7 +95,7 @@ mv hysteria /usr/local/bin/
 
 # 创建配置文件
 cat > /etc/hysteria/config.yaml << EOF
-listen: :443
+listen: :${USER_PORT}
 
 auth:
   type: password
@@ -126,22 +144,22 @@ systemctl start hysteria-server
 systemctl status hysteria-server
 
 # 生成 Hysteria 2 URI
-HY2_URI="hy2://${SERVER_IP}:443?insecure=1&password=${USER_PASSWORD}#Hysteria2"
+HY2_URI="hy2://${SERVER_IP}:${USER_PORT}?insecure=1&password=${USER_PASSWORD}#Hysteria2"
 echo -e "\nHysteria 2 安装完成！"
 echo "请检查服务状态确保正常运行。"
 echo "配置文件位置：/etc/hysteria/config.yaml"
 echo -e "\n=== 连接信息 ==="
 echo "服务器IP：$SERVER_IP"
-echo "端口：443"
+echo "端口：${USER_PORT}"
 echo "密码：${USER_PASSWORD}"
 echo -e "\n=== 防火墙状态 ==="
 # 检查防火墙端口状态
 if command -v ufw >/dev/null 2>&1; then
-    ufw status | grep 443
+    ufw status | grep ${USER_PORT}
 elif command -v firewall-cmd >/dev/null 2>&1; then
-    firewall-cmd --list-ports | grep 443
+    firewall-cmd --list-ports | grep ${USER_PORT}
 else
-    iptables -L | grep 443
+    iptables -L | grep ${USER_PORT}
 fi
 echo -e "\n=== 订阅链接 ==="
 echo "$HY2_URI"

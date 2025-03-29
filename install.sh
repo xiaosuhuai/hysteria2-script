@@ -508,8 +508,10 @@ EOF
     cat > /etc/hysteria/subscribe/info.txt << EOF
 订阅用户名：${SUBSCRIBE_USER}
 订阅密码：${SUBSCRIBE_PASS}
-Clash 订阅链接：http://${SERVER_IP}/${SUBSCRIBE_PATH}/clash
+普通订阅链接：http://${SERVER_IP}/${SUBSCRIBE_PATH}/clash
+直接订阅链接：http://${SUBSCRIBE_USER}:${SUBSCRIBE_PASS}@${SERVER_IP}/${SUBSCRIBE_PATH}/clash
 
+提示：直接订阅链接包含认证信息，扫码后可直接使用，但不建议分享给他人。
 注意：目前 QuantumultX 不支持 Hysteria2 协议
 EOF
 
@@ -523,12 +525,12 @@ if [ -f "/etc/hysteria/subscribe/info.txt" ]; then
     echo -e "\n配置文件位置："
     echo "Clash: /etc/hysteria/subscribe/clash.yaml"
     
-    # 获取订阅链接
-    SUBSCRIBE_LINK=$(grep "Clash 订阅链接：" /etc/hysteria/subscribe/info.txt | cut -d' ' -f2)
+    # 获取订阅链接（带认证信息的链接）
+    SUBSCRIBE_LINK=$(grep "直接订阅链接：" /etc/hysteria/subscribe/info.txt | cut -d' ' -f2)
     
     if [ ! -z "$SUBSCRIBE_LINK" ]; then
-        echo -e "\n=== 订阅二维码 ==="
-        echo "扫描下方二维码可直接导入配置："
+        echo -e "\n=== 订阅二维码（扫描后可直接使用） ==="
+        echo "扫描下方二维码可直接导入配置（无需手动输入认证信息）："
         qrencode -t ANSIUTF8 "$SUBSCRIBE_LINK"
     fi
 else
@@ -549,15 +551,16 @@ EOF
     echo "订阅用户名：$SUBSCRIBE_USER"
     echo "订阅密码：$SUBSCRIBE_PASS"
     echo -e "\n=== 订阅链接 ==="
-    echo "Clash 订阅链接：http://${SERVER_IP}/${SUBSCRIBE_PATH}/clash"
-    echo -e "\n=== 订阅二维码 ==="
-    echo "扫描下方二维码可直接导入配置："
-    SUBSCRIBE_LINK="http://${SERVER_IP}/${SUBSCRIBE_PATH}/clash"
+    echo "普通订阅链接：http://${SERVER_IP}/${SUBSCRIBE_PATH}/clash"
+    echo "直接订阅链接：http://${SUBSCRIBE_USER}:${SUBSCRIBE_PASS}@${SERVER_IP}/${SUBSCRIBE_PATH}/clash"
+    echo -e "\n=== 订阅二维码（扫描后可直接使用） ==="
+    echo "扫描下方二维码可直接导入配置（无需手动输入认证信息）："
+    SUBSCRIBE_LINK="http://${SUBSCRIBE_USER}:${SUBSCRIBE_PASS}@${SERVER_IP}/${SUBSCRIBE_PATH}/clash"
     qrencode -t ANSIUTF8 "$SUBSCRIBE_LINK"
     
     echo -e "\n提示："
-    echo "1. 订阅链接需要使用用户名和密码认证"
-    echo "2. 由于使用自签名证书，客户端需要开启跳过证书验证"
+    echo "1. 直接订阅链接和二维码包含认证信息，扫描后可直接使用，但请勿分享给他人"
+    echo "2. 如需分享，请使用普通订阅链接，对方需手动输入用户名和密码"
     echo "3. 订阅信息已保存到：/etc/hysteria/subscribe/"
     echo "4. 使用 'hy2sub' 命令可随时查看订阅信息"
     echo "5. 注意：目前 QuantumultX 不支持 Hysteria2 协议"

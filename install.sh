@@ -118,31 +118,54 @@ chmod 644 /etc/hysteria/cert.crt
 chmod 600 /etc/hysteria/private.key
 
 # 检测系统架构
+echo "检测系统架构..."
 ARCH=$(uname -m)
+echo "当前系统架构: $ARCH"
 case $ARCH in
     x86_64)  ARCH="amd64" ;;
     aarch64) ARCH="arm64" ;;
     armv7l)  ARCH="arm" ;;
     *)       echo "不支持的系统架构: $ARCH" && exit 1 ;;
 esac
+echo "对应的 Hysteria 架构: $ARCH"
 
 # 下载并安装 Hysteria 2
 echo "下载 Hysteria 2..."
 DOWNLOAD_URL="https://github.com/apernet/hysteria/releases/download/${HYSTERIA_VERSION}/hysteria-linux-${ARCH}"
 BACKUP_URL="https://ghproxy.com/https://github.com/apernet/hysteria/releases/download/${HYSTERIA_VERSION}/hysteria-linux-${ARCH}"
 
-curl -Lo hysteria "$DOWNLOAD_URL"
-if [ $? -ne 0 ]; then
-    echo "直接下载失败，尝试使用代理下载..."
-    curl -Lo hysteria "$BACKUP_URL"
-    if [ $? -ne 0 ]; then
+echo "尝试从主地址下载: $DOWNLOAD_URL"
+if ! curl -Lo hysteria "$DOWNLOAD_URL"; then
+    echo "主地址下载失败，尝试从备用地址下载: $BACKUP_URL"
+    if ! curl -Lo hysteria "$BACKUP_URL"; then
         echo "下载失败，请检查网络连接或手动下载：$DOWNLOAD_URL"
         exit 1
     fi
 fi
 
+# 检查文件是否成功下载和权限设置
+echo "检查下载文件..."
+if [ ! -f "hysteria" ]; then
+    echo "错误：文件下载失败"
+    exit 1
+fi
+
+echo "设置可执行权限..."
 chmod +x hysteria
+
+echo "检查文件类型..."
+file hysteria
+
+echo "移动文件到目标目录..."
 mv hysteria /usr/local/bin/
+
+echo "验证可执行文件..."
+/usr/local/bin/hysteria --version || {
+    echo "错误：hysteria 执行失败"
+    echo "文件信息："
+    file /usr/local/bin/hysteria
+    exit 1
+}
 
 # 创建配置文件
 cat > /etc/hysteria/config.yaml << EOF

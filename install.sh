@@ -61,20 +61,48 @@ uninstall_hysteria() {
     rm -f /etc/systemd/system/hysteria-server.service
     systemctl daemon-reload
     
+    # 检查并杀死所有 hysteria 进程
+    if pgrep hysteria >/dev/null; then
+        echo "正在终止所有 Hysteria 进程..."
+        pkill -9 hysteria
+        sleep 2
+    fi
+    
     # 删除主程序
     rm -f /usr/local/bin/hysteria
     
     # 删除配置文件和证书
     rm -rf /etc/hysteria
     
-    # 删除 Nginx 配置
+    # 删除 Nginx 配置和认证文件
     rm -f /etc/nginx/conf.d/hysteria-subscribe.conf
+    rm -f /etc/nginx/.htpasswd
     systemctl restart nginx
     
     # 删除查询脚本
     rm -f /usr/local/bin/hy2sub
     
+    # 检查是否有残留进程
+    if pgrep hysteria >/dev/null; then
+        echo "警告：仍有 Hysteria 进程在运行，进程信息："
+        ps aux | grep hysteria | grep -v grep
+        echo "请手动终止这些进程"
+    fi
+    
+    # 检查端口占用
+    echo "检查常用端口占用情况..."
+    for port in 443 80 8443 2083 2087 2096 8080 8880 9993; do
+        if netstat -tuln | grep -q ":$port "; then
+            echo "端口 $port 仍被占用，占用情况："
+            netstat -tuln | grep ":$port "
+            if lsof -i :$port >/dev/null 2>&1; then
+                lsof -i :$port
+            fi
+        fi
+    done
+    
     echo "Hysteria 2 已完全卸载！"
+    echo "如果您看到任何端口占用警告，请确保这些不是其他重要服务。"
 }
 
 # 查询订阅信息函数

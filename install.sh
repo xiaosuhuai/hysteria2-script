@@ -49,6 +49,55 @@ check_port() {
     return 0
 }
 
+# 检查 Nginx 配置和服务状态的函数
+check_nginx() {
+    echo "检查 Nginx 配置和服务状态..."
+    
+    # 检查 Nginx 是否已安装
+    if ! command -v nginx >/dev/null 2>&1; then
+        echo "Nginx 未安装，正在安装..."
+        apt update
+        apt install -y nginx
+    else
+        echo "检测到已安装的 Nginx，将添加 Hysteria 订阅配置..."
+    fi
+
+    # 确保必要的目录存在
+    mkdir -p /etc/nginx/conf.d
+    mkdir -p /var/log/nginx
+    
+    # 备份现有的 Hysteria 订阅配置（如果存在）
+    if [ -f "/etc/nginx/conf.d/hysteria-subscribe.conf" ]; then
+        echo "备份现有的 Hysteria 订阅配置..."
+        mv /etc/nginx/conf.d/hysteria-subscribe.conf /etc/nginx/conf.d/hysteria-subscribe.conf.bak
+    fi
+    
+    # 检查 Nginx 配置语法
+    echo "检查 Nginx 配置语法..."
+    if ! nginx -t; then
+        echo "现有 Nginx 配置存在语法错误，请手动检查修复后再运行脚本"
+        return 1
+    fi
+    
+    # 检查 Nginx 服务状态
+    if ! systemctl is-active nginx >/dev/null 2>&1; then
+        echo "Nginx 服务未运行，正在启动..."
+        systemctl start nginx
+    fi
+    
+    # 确保 Nginx 开机自启
+    systemctl enable nginx
+    
+    # 最终状态检查
+    if systemctl is-active nginx >/dev/null 2>&1; then
+        echo "Nginx 服务正在运行"
+    else
+        echo "警告：Nginx 服务可能未正常运行，请检查日志"
+        journalctl -u nginx --no-pager | tail -n 10
+        return 1
+    fi
+}
+
 # 卸载函数
 uninstall_hysteria() {
     echo "开始卸载 Hysteria 2..."
@@ -74,20 +123,20 @@ uninstall_hysteria() {
     # 删除配置文件和证书
     rm -rf /etc/hysteria
     
-    # 询问是否删除 Nginx
-    read -p "是否同时卸载 Nginx？这可能会影响其他使用 Nginx 的服务 (y/n): " remove_nginx
-    if [[ $remove_nginx =~ ^[Yy]$ ]]; then
-        echo "正在卸载 Nginx..."
-        apt remove -y nginx nginx-common
-        apt autoremove -y
-        rm -rf /etc/nginx
-        echo "Nginx 已完全卸载"
-    else
-        # 仅删除 Hysteria 相关的 Nginx 配置
-        echo "仅删除 Hysteria 相关的 Nginx 配置..."
+    # 删除 Hysteria 相关的 Nginx 配置
+    if [ -f "/etc/nginx/conf.d/hysteria-subscribe.conf" ]; then
+        echo "删除 Hysteria 相关的 Nginx 配置..."
         rm -f /etc/nginx/conf.d/hysteria-subscribe.conf
         rm -f /etc/nginx/.htpasswd
-        systemctl restart nginx
+        
+        # 如果存在备份配置，则恢复
+        if [ -f "/etc/nginx/conf.d/hysteria-subscribe.conf.bak" ]; then
+            echo "恢复备份的 Nginx 配置..."
+            mv /etc/nginx/conf.d/hysteria-subscribe.conf.bak /etc/nginx/conf.d/hysteria-subscribe.conf
+        fi
+        
+        # 重新加载 Nginx 配置
+        systemctl reload nginx
     fi
     
     # 删除查询脚本
@@ -113,7 +162,7 @@ uninstall_hysteria() {
     done
     
     echo "Hysteria 2 已完全卸载！"
-    echo "如果您看到任何端口占用警告，请确保这些不是其他重要服务。"
+    echo "Nginx 配置已清理，其他 Nginx 服务不受影响"
 }
 
 # 查询订阅信息函数
@@ -141,132 +190,6 @@ query_subscription() {
         fi
     else
         echo "未找到订阅信息，请确认是否已安装 Hysteria 2"
-    fi
-}
-
-# 检查 Nginx 配置和服务状态的函数
-check_nginx() {
-    echo "检查 Nginx 配置和服务状态..."
-    
-    # 完全卸载已有的 Nginx（如果存在）
-    if dpkg -l | grep -q nginx; then
-        echo "检测到已安装的 Nginx，正在重新安装..."
-        systemctl stop nginx || true
-        apt remove --purge -y nginx nginx-common nginx-core || true
-        apt autoremove -y
-        rm -rf /etc/nginx
-        rm -rf /var/log/nginx
-    fi
-    
-    # 重新安装 Nginx
-    echo "安装 Nginx..."
-    apt update
-    apt install -y nginx
-    
-    # 如果安装失败，尝试修复
-    if [ $? -ne 0 ]; then
-        echo "Nginx 安装失败，尝试修复..."
-        apt --fix-broken install -y
-        apt update
-        apt install -y nginx
-    fi
-    
-    # 确保基本目录存在
-    mkdir -p /etc/nginx/conf.d
-    mkdir -p /etc/nginx/sites-enabled
-    mkdir -p /var/log/nginx
-    mkdir -p /etc/nginx/modules-enabled
-    
-    # 创建 mime.types 文件
-    if [ ! -f "/etc/nginx/mime.types" ]; then
-        echo "创建 mime.types 文件..."
-        cat > /etc/nginx/mime.types << 'EOF'
-types {
-    text/html                             html htm shtml;
-    text/css                              css;
-    text/xml                              xml;
-    image/gif                             gif;
-    image/jpeg                            jpeg jpg;
-    application/javascript                js;
-    application/atom+xml                  atom;
-    application/rss+xml                   rss;
-    text/plain                            txt;
-    image/png                             png;
-    application/pdf                       pdf;
-    application/x-shockwave-flash         swf;
-    application/x-tar                     tar;
-    application/zip                       zip;
-}
-EOF
-    fi
-    
-    # 确保配置文件存在
-    if [ ! -f "/etc/nginx/nginx.conf" ]; then
-        echo "创建 Nginx 默认配置文件..."
-        cat > /etc/nginx/nginx.conf << 'EOF'
-user www-data;
-worker_processes auto;
-pid /run/nginx.pid;
-include /etc/nginx/modules-enabled/*.conf;
-
-events {
-    worker_connections 768;
-}
-
-http {
-    sendfile on;
-    tcp_nopush on;
-    types_hash_max_size 2048;
-    include /etc/nginx/mime.types;
-    default_type application/octet-stream;
-    ssl_protocols TLSv1 TLSv1.1 TLSv1.2 TLSv1.3;
-    ssl_prefer_server_ciphers on;
-    access_log /var/log/nginx/access.log;
-    error_log /var/log/nginx/error.log;
-    gzip on;
-    include /etc/nginx/conf.d/*.conf;
-    include /etc/nginx/sites-enabled/*;
-}
-EOF
-    fi
-    
-    # 设置正确的权限
-    chown -R www-data:www-data /var/log/nginx
-    chmod 755 /etc/nginx
-    chmod 644 /etc/nginx/nginx.conf
-    chmod 644 /etc/nginx/mime.types
-    
-    # 删除默认站点配置
-    rm -f /etc/nginx/sites-enabled/default
-    
-    # 测试配置文件
-    echo "测试 Nginx 配置..."
-    nginx -t
-    
-    # 尝试启动 Nginx
-    echo "启动 Nginx 服务..."
-    systemctl daemon-reload
-    systemctl stop nginx || true
-    sleep 2
-    systemctl start nginx
-    
-    # 如果启动失败，尝试修复
-    if ! systemctl is-active nginx >/dev/null 2>&1; then
-        echo "Nginx 启动失败，尝试修复..."
-        systemctl reset-failed nginx
-        systemctl start nginx
-        sleep 2
-    fi
-    
-    # 确保服务开机自启
-    systemctl enable nginx
-    
-    # 最终状态检查
-    if systemctl is-active nginx >/dev/null 2>&1; then
-        echo "Nginx 服务已成功启动"
-    else
-        echo "警告：Nginx 服务可能未正常运行，请检查日志"
-        journalctl -u nginx --no-pager | tail -n 10
     fi
 }
 

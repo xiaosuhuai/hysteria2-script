@@ -599,15 +599,23 @@ EOF
 
     # 测试订阅文件是否可访问
     echo "测试订阅链接可访问性..."
-    if curl -s -I -u "${SUBSCRIBE_USER}:${SUBSCRIBE_PASS}" "http://localhost/${SUBSCRIBE_PATH}/clash" | grep -q "200 OK"; then
+    echo "注意：Nginx 日志中的 'signal process started' 是正常的重启信息，不是错误"
+    
+    if curl -s -I -u "${SUBSCRIBE_USER}:${SUBSCRIBE_PASS}" "http://${SERVER_IP}/${SUBSCRIBE_PATH}/clash" | grep -q "200 OK"; then
         echo "订阅链接测试正常（HTTP 状态码：200）"
-        if curl -s -u "${SUBSCRIBE_USER}:${SUBSCRIBE_PASS}" "http://localhost/${SUBSCRIBE_PATH}/clash" | grep -q "proxies:"; then
+        if curl -s -u "${SUBSCRIBE_USER}:${SUBSCRIBE_PASS}" "http://${SERVER_IP}/${SUBSCRIBE_PATH}/clash" | grep -q "proxies:"; then
             echo "配置文件内容验证正常"
         fi
     else
-        echo "警告：订阅链接可能无法正常访问，请检查 Nginx 配置"
-        echo "Nginx 错误日志："
-        tail -n 10 /var/log/nginx/error.log
+        # 尝试使用内部 IP 测试
+        if curl -s -I -u "${SUBSCRIBE_USER}:${SUBSCRIBE_PASS}" "http://localhost/${SUBSCRIBE_PATH}/clash" | grep -q "200 OK"; then
+            echo "本地测试正常，但使用公网 IP 时可能有问题"
+            echo "建议：确认防火墙已开放 80 端口，且没有其他网络限制"
+        else
+            echo "警告：订阅链接可能无法正常访问，请检查 Nginx 配置"
+            echo "Nginx 错误日志："
+            tail -n 10 /var/log/nginx/error.log
+        fi
     fi
 
     # 保存订阅信息

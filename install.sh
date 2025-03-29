@@ -148,19 +148,56 @@ query_subscription() {
 check_nginx() {
     echo "检查 Nginx 配置和服务状态..."
     
-    # 检查 Nginx 是否安装
-    if ! command -v nginx >/dev/null 2>&1; then
-        echo "Nginx 未安装，正在安装..."
+    # 完全卸载已有的 Nginx（如果存在）
+    if dpkg -l | grep -q nginx; then
+        echo "检测到已安装的 Nginx，正在重新安装..."
+        systemctl stop nginx || true
+        apt remove --purge -y nginx nginx-common nginx-core || true
+        apt autoremove -y
+        rm -rf /etc/nginx
+        rm -rf /var/log/nginx
+    fi
+    
+    # 重新安装 Nginx
+    echo "安装 Nginx..."
+    apt update
+    apt install -y nginx
+    
+    # 如果安装失败，尝试修复
+    if [ $? -ne 0 ]; then
+        echo "Nginx 安装失败，尝试修复..."
+        apt --fix-broken install -y
         apt update
         apt install -y nginx
-        
-        # 如果安装失败，尝试修复
-        if [ $? -ne 0 ]; then
-            echo "Nginx 安装失败，尝试修复..."
-            apt --fix-broken install -y
-            apt update
-            apt install -y nginx
-        fi
+    fi
+    
+    # 确保基本目录存在
+    mkdir -p /etc/nginx/conf.d
+    mkdir -p /etc/nginx/sites-enabled
+    mkdir -p /var/log/nginx
+    mkdir -p /etc/nginx/modules-enabled
+    
+    # 创建 mime.types 文件
+    if [ ! -f "/etc/nginx/mime.types" ]; then
+        echo "创建 mime.types 文件..."
+        cat > /etc/nginx/mime.types << 'EOF'
+types {
+    text/html                             html htm shtml;
+    text/css                              css;
+    text/xml                              xml;
+    image/gif                             gif;
+    image/jpeg                            jpeg jpg;
+    application/javascript                js;
+    application/atom+xml                  atom;
+    application/rss+xml                   rss;
+    text/plain                            txt;
+    image/png                             png;
+    application/pdf                       pdf;
+    application/x-shockwave-flash         swf;
+    application/x-tar                     tar;
+    application/zip                       zip;
+}
+EOF
     fi
     
     # 确保配置文件存在
@@ -193,42 +230,44 @@ http {
 EOF
     fi
     
-    # 确保必要的目录存在
-    mkdir -p /etc/nginx/conf.d
-    mkdir -p /etc/nginx/sites-enabled
-    mkdir -p /var/log/nginx
-    
     # 设置正确的权限
     chown -R www-data:www-data /var/log/nginx
+    chmod 755 /etc/nginx
+    chmod 644 /etc/nginx/nginx.conf
+    chmod 644 /etc/nginx/mime.types
     
-    # 备份默认配置
-    if [ -f "/etc/nginx/sites-enabled/default" ]; then
-        mv /etc/nginx/sites-enabled/default /etc/nginx/sites-enabled/default.bak
-    fi
+    # 删除默认站点配置
+    rm -f /etc/nginx/sites-enabled/default
     
     # 测试配置文件
     echo "测试 Nginx 配置..."
     nginx -t
     
-    # 检查服务状态并尝试启动
+    # 尝试启动 Nginx
+    echo "启动 Nginx 服务..."
+    systemctl daemon-reload
+    systemctl stop nginx || true
+    sleep 2
+    systemctl start nginx
+    
+    # 如果启动失败，尝试修复
     if ! systemctl is-active nginx >/dev/null 2>&1; then
-        echo "Nginx 服务未运行，正在启动..."
+        echo "Nginx 启动失败，尝试修复..."
+        systemctl reset-failed nginx
         systemctl start nginx
         sleep 2
-        
-        # 如果启动失败，尝试修复
-        if ! systemctl is-active nginx >/dev/null 2>&1; then
-            echo "Nginx 启动失败，尝试修复..."
-            systemctl reset-failed nginx
-            systemctl start nginx
-        fi
     fi
     
     # 确保服务开机自启
     systemctl enable nginx
     
-    echo "Nginx 服务状态："
-    systemctl status nginx --no-pager
+    # 最终状态检查
+    if systemctl is-active nginx >/dev/null 2>&1; then
+        echo "Nginx 服务已成功启动"
+    else
+        echo "警告：Nginx 服务可能未正常运行，请检查日志"
+        journalctl -u nginx --no-pager | tail -n 10
+    fi
 }
 
 # 安装前清理检查函数

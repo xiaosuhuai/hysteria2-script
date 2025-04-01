@@ -458,15 +458,8 @@ EOF
     
     BASE_SUBSCRIBE_URL="${PROTOCOL}://${SERVER_IP}/${SUBSCRIBE_PATH}/clash"
 
-    # 生成订阅密码
-    SUBSCRIBE_USER="user_$(openssl rand -hex 4)"
-    SUBSCRIBE_PASS=$(openssl rand -base64 8)
-
-    # 创建认证文件
-    htpasswd -bc /etc/nginx/.htpasswd "$SUBSCRIBE_USER" "$SUBSCRIBE_PASS"
-
-    # 生成带认证信息的订阅地址
-    FULL_SUBSCRIBE_URL="${PROTOCOL}://${SUBSCRIBE_USER}:${SUBSCRIBE_PASS}@${SERVER_IP}/${SUBSCRIBE_PATH}/clash"
+    # 直接使用订阅链接，不再包含用户名和密码
+    FULL_SUBSCRIBE_URL="${PROTOCOL}://${SERVER_IP}/${SUBSCRIBE_PATH}/clash"
     
     # Base64 编码处理订阅地址（用于小火箭）
     BASE64_URL=$(echo -n "${FULL_SUBSCRIBE_URL}" | base64 | tr -d '\n')
@@ -896,8 +889,7 @@ server {
     error_log /var/log/nginx/hysteria-subscribe-error.log;
 
     location /${SUBSCRIBE_PATH}/clash {
-        auth_basic "Subscribe Authentication";
-        auth_basic_user_file /etc/nginx/.htpasswd;
+        # 移除基本身份验证，使用随机路径作为安全措施
         alias /etc/hysteria/subscribe/clash.yaml;
         default_type text/plain;
         add_header Content-Type 'text/plain; charset=utf-8';
@@ -915,8 +907,7 @@ server {
     error_log /var/log/nginx/hysteria-subscribe-error.log;
 
     location /${SUBSCRIBE_PATH}/clash {
-        auth_basic "Subscribe Authentication";
-        auth_basic_user_file /etc/nginx/.htpasswd;
+        # 移除基本身份验证，使用随机路径作为安全措施
         alias /etc/hysteria/subscribe/clash.yaml;
         default_type text/plain;
         add_header Content-Type 'text/plain; charset=utf-8';
@@ -1008,12 +999,9 @@ EOF
 
     # 保存订阅信息
     cat > /etc/hysteria/subscribe/info.txt << EOF
-订阅用户名：${SUBSCRIBE_USER}
-订阅密码：${SUBSCRIBE_PASS}
-
 === 订阅链接 ===
-Clash订阅：${BASE_SUBSCRIBE_URL}
-小火箭订阅：${SHADOWROCKET_URL}
+Clash订阅：${PROTOCOL}://${SERVER_IP}/${SUBSCRIBE_PATH}/clash
+小火箭订阅：sub://${BASE64_URL}#Hysteria2-${SERVER_IP}
 EOF
 
     # 创建查询脚本
@@ -1024,7 +1012,7 @@ if [ -f "/etc/hysteria/subscribe/info.txt" ]; then
     echo "=== Hysteria 2 订阅信息 ==="
     cat /etc/hysteria/subscribe/info.txt
     
-    # 获取订阅链接（带认证信息的链接）
+    # 获取订阅链接
     SUBSCRIBE_LINK=$(grep "小火箭订阅：" /etc/hysteria/subscribe/info.txt | cut -d'：' -f2)
     
     if [ ! -z "$SUBSCRIBE_LINK" ]; then

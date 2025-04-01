@@ -898,9 +898,9 @@ server {
     location /${SUBSCRIBE_PATH}/clash {
         auth_basic "Subscribe Authentication";
         auth_basic_user_file /etc/nginx/.htpasswd;
+        alias /etc/hysteria/subscribe/clash.yaml;
         default_type text/plain;
         add_header Content-Type 'text/plain; charset=utf-8';
-        return 200 '${CLASH_CONFIG}';
     }
 }
 EOF
@@ -917,9 +917,9 @@ server {
     location /${SUBSCRIBE_PATH}/clash {
         auth_basic "Subscribe Authentication";
         auth_basic_user_file /etc/nginx/.htpasswd;
+        alias /etc/hysteria/subscribe/clash.yaml;
         default_type text/plain;
         add_header Content-Type 'text/plain; charset=utf-8';
-        return 200 '${CLASH_CONFIG}';
     }
 }
 EOF

@@ -281,6 +281,18 @@ install_hysteria() {
         echo "已生成随机密码: $USER_PASSWORD"
     fi
 
+    # 询问用户是否使用HTTPS
+    echo "提示：订阅链接使用HTTP更易于客户端导入，HTTPS可能会因自签名证书导致导入失败"
+    read -p "是否为订阅链接启用HTTPS? (自签名证书可能导致导入问题) [y/N]: " USE_HTTPS_CHOICE
+    if [[ $USE_HTTPS_CHOICE =~ ^[Yy]$ ]]; then
+        echo "将为订阅链接启用HTTPS..."
+        echo "警告：如果订阅导入失败，请尝试关闭证书验证或重新安装并选择HTTP"
+        USE_HTTPS="true"
+    else
+        echo "将使用HTTP协议用于订阅链接..."
+        USE_HTTPS="false"
+    fi
+
     # 安装必要的软件包
     apt update
     apt install -y curl openssl net-tools lsof nginx apache2-utils qrencode ifstat iftop
@@ -425,11 +437,9 @@ EOF
     SUBSCRIBE_PATH=$(openssl rand -hex 16)
     VMESS_NAME="Hysteria2-${SERVER_IP}"
     
-    # 根据证书情况确定是否使用HTTPS
-    echo "检查是否可以配置HTTPS..."
-    if [ -f "/etc/hysteria/cert.crt" ] && [ -f "/etc/hysteria/private.key" ]; then
-        echo "使用Hysteria自身的证书配置HTTPS..."
-        USE_HTTPS="true"
+    # 根据用户选择决定是否使用HTTPS
+    if [ "$USE_HTTPS" = "true" ] && [ -f "/etc/hysteria/cert.crt" ] && [ -f "/etc/hysteria/private.key" ]; then
+        echo "配置HTTPS..."
         PROTOCOL="https"
         # 复制证书到Nginx目录
         cp /etc/hysteria/cert.crt /etc/nginx/cert.crt
@@ -437,7 +447,11 @@ EOF
         chmod 644 /etc/nginx/cert.crt
         chmod 600 /etc/nginx/private.key
     else
-        echo "未找到有效的SSL证书，使用HTTP协议..."
+        if [ "$USE_HTTPS" = "true" ]; then
+            echo "未找到SSL证书或配置失败，回退到HTTP协议..."
+        else
+            echo "按照用户选择，使用HTTP协议..."
+        fi
         USE_HTTPS="false"
         PROTOCOL="http"
     fi
@@ -456,7 +470,13 @@ EOF
     
     # Base64 编码处理订阅地址（用于小火箭）
     BASE64_URL=$(echo -n "${FULL_SUBSCRIBE_URL}" | base64 | tr -d '\n')
-    SHADOWROCKET_URL="sub://${BASE64_URL}#Hysteria2-${SERVER_IP}"
+    
+    # 使用特殊格式以确保客户端兼容性
+    if [ "$PROTOCOL" = "https" ]; then
+        SHADOWROCKET_URL="sub://${BASE64_URL}#Hysteria2-${SERVER_IP}-HTTPS"
+    else
+        SHADOWROCKET_URL="sub://${BASE64_URL}#Hysteria2-${SERVER_IP}"
+    fi
 
     # 生成配置文件
     CLASH_CONFIG=$(cat << EOF

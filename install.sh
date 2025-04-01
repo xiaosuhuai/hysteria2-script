@@ -295,6 +295,7 @@ install_hysteria() {
         ufw allow ${USER_PORT}/tcp
         ufw allow ${USER_PORT}/udp
         ufw allow 80/tcp
+        ufw allow 443/tcp
         # 如果 UFW 未启用，启用它
         if ! ufw status | grep -q "Status: active"; then
             ufw --force enable
@@ -305,6 +306,7 @@ install_hysteria() {
         iptables -I INPUT -p tcp --dport ${USER_PORT} -j ACCEPT
         iptables -I INPUT -p udp --dport ${USER_PORT} -j ACCEPT
         iptables -I INPUT -p tcp --dport 80 -j ACCEPT
+        iptables -I INPUT -p tcp --dport 443 -j ACCEPT
         # 保存 iptables 规则
         if command -v iptables-save >/dev/null 2>&1; then
             if [ -d "/etc/iptables" ]; then
@@ -321,6 +323,7 @@ install_hysteria() {
         firewall-cmd --permanent --add-port=${USER_PORT}/tcp
         firewall-cmd --permanent --add-port=${USER_PORT}/udp
         firewall-cmd --permanent --add-port=80/tcp
+        firewall-cmd --permanent --add-port=443/tcp
         firewall-cmd --reload
         echo "firewalld 防火墙规则已配置"
     fi
@@ -420,7 +423,25 @@ EOF
     # 生成订阅链接
     SUBSCRIBE_PATH=$(openssl rand -hex 16)
     VMESS_NAME="Hysteria2-${SERVER_IP}"
-    BASE_SUBSCRIBE_URL="http://${SERVER_IP}/${SUBSCRIBE_PATH}/clash"
+    
+    # 根据证书情况确定是否使用HTTPS
+    echo "检查是否可以配置HTTPS..."
+    if [ -f "/etc/hysteria/cert.crt" ] && [ -f "/etc/hysteria/private.key" ]; then
+        echo "使用Hysteria自身的证书配置HTTPS..."
+        USE_HTTPS="true"
+        PROTOCOL="https"
+        # 复制证书到Nginx目录
+        cp /etc/hysteria/cert.crt /etc/nginx/cert.crt
+        cp /etc/hysteria/private.key /etc/nginx/private.key
+        chmod 644 /etc/nginx/cert.crt
+        chmod 600 /etc/nginx/private.key
+    else
+        echo "未找到有效的SSL证书，使用HTTP协议..."
+        USE_HTTPS="false"
+        PROTOCOL="http"
+    fi
+    
+    BASE_SUBSCRIBE_URL="${PROTOCOL}://${SERVER_IP}/${SUBSCRIBE_PATH}/clash"
 
     # 生成订阅密码
     SUBSCRIBE_USER="user_$(openssl rand -hex 4)"
@@ -430,7 +451,7 @@ EOF
     htpasswd -bc /etc/nginx/.htpasswd "$SUBSCRIBE_USER" "$SUBSCRIBE_PASS"
 
     # 生成带认证信息的订阅地址
-    FULL_SUBSCRIBE_URL="http://${SUBSCRIBE_USER}:${SUBSCRIBE_PASS}@${SERVER_IP}/${SUBSCRIBE_PATH}/clash"
+    FULL_SUBSCRIBE_URL="${PROTOCOL}://${SUBSCRIBE_USER}:${SUBSCRIBE_PASS}@${SERVER_IP}/${SUBSCRIBE_PATH}/clash"
     
     # Base64 编码处理订阅地址（用于小火箭）
     BASE64_URL=$(echo -n "${FULL_SUBSCRIBE_URL}" | base64 | tr -d '\n')
@@ -523,7 +544,43 @@ server {
 }
 EOF
 
-    cat > /etc/nginx/conf.d/hysteria-subscribe.conf << EOF
+    if [ "$USE_HTTPS" = "true" ]; then
+        cat > /etc/nginx/conf.d/hysteria-subscribe.conf << EOF
+server {
+    listen 80;
+    server_name ${SERVER_IP};
+    charset utf-8;
+    
+    # 将HTTP请求重定向到HTTPS
+    location / {
+        return 301 https://${SERVER_IP}\$request_uri;
+    }
+}
+
+server {
+    listen 443 ssl;
+    server_name ${SERVER_IP};
+    charset utf-8;
+    
+    ssl_certificate /etc/nginx/cert.crt;
+    ssl_certificate_key /etc/nginx/private.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_prefer_server_ciphers on;
+    
+    access_log /var/log/nginx/hysteria-subscribe-access.log;
+    error_log /var/log/nginx/hysteria-subscribe-error.log;
+
+    location /${SUBSCRIBE_PATH}/clash {
+        auth_basic "Subscribe Authentication";
+        auth_basic_user_file /etc/nginx/.htpasswd;
+        default_type text/plain;
+        add_header Content-Type 'text/plain; charset=utf-8';
+        return 200 '${CLASH_CONFIG}';
+    }
+}
+EOF
+    else
+        cat > /etc/nginx/conf.d/hysteria-subscribe.conf << EOF
 server {
     listen 80;
     server_name ${SERVER_IP};
@@ -541,6 +598,7 @@ server {
     }
 }
 EOF
+    fi
 
     # 移除默认的 Nginx 配置
     rm -f /etc/nginx/sites-enabled/default
@@ -601,16 +659,21 @@ EOF
     echo "测试订阅链接可访问性..."
     echo "注意：Nginx 日志中的 'signal process started' 是正常的重启信息，不是错误"
     
-    if curl -s -I -u "${SUBSCRIBE_USER}:${SUBSCRIBE_PASS}" "http://${SERVER_IP}/${SUBSCRIBE_PATH}/clash" | grep -q "200 OK"; then
+    if curl -s -I -k -u "${SUBSCRIBE_USER}:${SUBSCRIBE_PASS}" "${PROTOCOL}://${SERVER_IP}/${SUBSCRIBE_PATH}/clash" | grep -q "200 OK"; then
         echo "订阅链接测试正常（HTTP 状态码：200）"
-        if curl -s -u "${SUBSCRIBE_USER}:${SUBSCRIBE_PASS}" "http://${SERVER_IP}/${SUBSCRIBE_PATH}/clash" | grep -q "proxies:"; then
+        if curl -s -k -u "${SUBSCRIBE_USER}:${SUBSCRIBE_PASS}" "${PROTOCOL}://${SERVER_IP}/${SUBSCRIBE_PATH}/clash" | grep -q "proxies:"; then
             echo "配置文件内容验证正常"
         fi
     else
         # 尝试使用内部 IP 测试
-        if curl -s -I -u "${SUBSCRIBE_USER}:${SUBSCRIBE_PASS}" "http://localhost/${SUBSCRIBE_PATH}/clash" | grep -q "200 OK"; then
+        if curl -s -I -k -u "${SUBSCRIBE_USER}:${SUBSCRIBE_PASS}" "${PROTOCOL}://localhost/${SUBSCRIBE_PATH}/clash" | grep -q "200 OK"; then
             echo "本地测试正常，但使用公网 IP 时可能有问题"
-            echo "建议：确认防火墙已开放 80 端口，且没有其他网络限制"
+            echo "建议：确认防火墙已开放 80 端口" 
+            if [ "$USE_HTTPS" = "true" ]; then
+                echo "以及 443 端口，且没有其他网络限制"
+            else 
+                echo "且没有其他网络限制"
+            fi
         else
             echo "警告：订阅链接可能无法正常访问，请检查 Nginx 配置"
             echo "Nginx 错误日志："

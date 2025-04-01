@@ -12,6 +12,7 @@ show_menu() {
     echo "1. 全新安装"
     echo "2. 卸载服务"
     echo "3. 查询订阅"
+    echo "4. 查询连接"
     echo "0. 退出脚本"
     echo "------------------------"
 }
@@ -282,7 +283,7 @@ install_hysteria() {
 
     # 安装必要的软件包
     apt update
-    apt install -y curl openssl net-tools lsof nginx apache2-utils qrencode
+    apt install -y curl openssl net-tools lsof nginx apache2-utils qrencode ifstat iftop
 
     # 检查 Nginx 状态
     check_nginx
@@ -714,6 +715,134 @@ EOF
 
     chmod +x /usr/local/bin/hy2sub
 
+    # 创建连接查询脚本
+    cat > /usr/local/bin/hy2stat << 'EOF'
+#!/bin/bash
+
+# 显示头部信息
+echo "=== Hysteria 2 连接状态 ==="
+
+# 检查 Hysteria 服务是否运行
+if ! systemctl is-active hysteria-server >/dev/null 2>&1; then
+    echo "Hysteria 服务未运行，无法查询连接数据"
+    exit 1
+fi
+
+# 获取 Hysteria 使用的端口
+PORT=$(grep "listen:" /etc/hysteria/config.yaml | awk -F':' '{print $3}')
+if [ -z "$PORT" ]; then
+    echo "无法从配置文件获取端口信息"
+    exit 1
+fi
+
+echo "正在查询端口 $PORT 的连接情况..."
+
+# 统计总连接数
+TOTAL_CONN=$(netstat -anp | grep -c ":$PORT ")
+# 统计不同的IP地址数量（即客户端数量）
+UNIQUE_IPS=$(netstat -anp | grep ":$PORT " | awk '{print $5}' | cut -d: -f1 | sort | uniq | wc -l)
+# 获取连接列表
+CONN_LIST=$(netstat -anp | grep ":$PORT " | awk '{print $5}' | cut -d: -f1 | sort | uniq -c | sort -nr)
+
+echo "当前活跃连接总数: $TOTAL_CONN"
+echo "当前连接的客户端数: $UNIQUE_IPS"
+
+# 显示详细的连接列表
+if [ ! -z "$CONN_LIST" ]; then
+    echo -e "\n=== 连接客户端列表 ==="
+    echo "数量 IP地址"
+    echo "$CONN_LIST"
+fi
+
+# 显示系统负载
+echo -e "\n=== 系统负载 ==="
+uptime
+
+# 显示网络流量统计（如果安装了ifstat）
+if command -v ifstat >/dev/null 2>&1; then
+    echo -e "\n=== 实时网络流量 (KB/s) ==="
+    ifstat -t 1 1
+else
+    echo -e "\n提示: 安装 ifstat 可以查看实时网络流量统计"
+    echo "运行: apt-get install ifstat 或 yum install ifstat"
+fi
+
+# 显示详细的连接状态（如果安装了ss命令）
+if command -v ss >/dev/null 2>&1; then
+    echo -e "\n=== 详细连接状态 ==="
+    ss -tnp state established "( sport = :$PORT or dport = :$PORT )" | head -n 20
+    if [ $(ss -tnp state established "( sport = :$PORT or dport = :$PORT )" | wc -l) -gt 20 ]; then
+        echo "... (仅显示前20条记录)"
+    fi
+fi
+
+# 获取该端口的总流量（如果安装了iftop）
+if command -v iftop >/dev/null 2>&1; then
+    echo -e "\n=== 端口 $PORT 流量监控 ==="
+    echo "请手动运行以下命令查看实时流量："
+    echo "iftop -nNP -f 'port $PORT'"
+fi
+
+# 如果是高级模式，显示更多信息
+if [ "$1" = "-a" ] || [ "$1" = "--advanced" ]; then
+    echo -e "\n=== 连接耗时统计 ==="
+    if command -v ss >/dev/null 2>&1; then
+        echo "连接时长："
+        ss -tnpo state established "( sport = :$PORT or dport = :$PORT )" | grep -oP 'timer:\(\w+,\K[^,]+' | sort -n | uniq -c
+    fi
+    
+    echo -e "\n=== 系统资源使用情况 ==="
+    if command -v top >/dev/null 2>&1; then
+        top -bn1 | head -n 12
+    fi
+    
+    echo -e "\n=== Hysteria 进程状态 ==="
+    ps aux | grep -v grep | grep hysteria
+fi
+
+# 帮助信息
+if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    echo -e "\n使用方法:"
+    echo "  hy2stat             - 显示基本连接统计"
+    echo "  hy2stat -a          - 显示高级连接统计（包括连接时长和系统资源）"
+    echo "  hy2stat -m          - 持续监控连接状态（每5秒更新一次）"
+    echo "  hy2stat -h          - 显示帮助信息"
+    echo ""
+fi
+
+# 如果是监控模式，持续显示状态
+if [ "$1" = "-m" ] || [ "$1" = "--monitor" ]; then
+    echo -e "\n正在启动监控模式（每5秒更新一次）...\n"
+    echo "按 Ctrl+C 退出监控"
+    
+    while true; do
+        clear
+        date
+        echo "=== Hysteria 2 连接状态 (实时监控) ==="
+        echo "当前活跃连接总数: $(netstat -anp | grep -c ":$PORT ")"
+        echo "当前连接的客户端数: $(netstat -anp | grep ":$PORT " | awk '{print $5}' | cut -d: -f1 | sort | uniq | wc -l)"
+        
+        # 显示连接列表
+        CONN_LIST=$(netstat -anp | grep ":$PORT " | awk '{print $5}' | cut -d: -f1 | sort | uniq -c | sort -nr)
+        if [ ! -z "$CONN_LIST" ]; then
+            echo -e "\n=== 连接客户端列表 ==="
+            echo "数量 IP地址"
+            echo "$CONN_LIST"
+        fi
+        
+        # 显示网络流量
+        if command -v ifstat >/dev/null 2>&1; then
+            echo -e "\n=== 实时网络流量 (KB/s) ==="
+            ifstat -t 1 1
+        fi
+        
+        sleep 4
+    done
+fi
+EOF
+
+    chmod +x /usr/local/bin/hy2stat
+
     echo -e "\nHysteria 2 安装完成！"
     echo "配置文件位置：/etc/hysteria/config.yaml"
     echo -e "\n=== 连接信息 ==="
@@ -738,6 +867,7 @@ EOF
     echo "2. 如需分享，请使用 Clash 订阅链接，对方需手动输入用户名和密码"
     echo "3. 订阅信息已保存到：/etc/hysteria/subscribe/"
     echo "4. 使用 'hy2sub' 命令可随时查看订阅信息"
+    echo "5. 使用 'hy2stat' 命令可随时查看连接状态"
     echo -e "\n=== iOS 客户端支持 ==="
     echo "支持的客户端（版本要求）："
     echo "1. Shadowrocket (v2.2.35+) - 推荐，性价比高"
@@ -749,10 +879,70 @@ EOF
     echo "7. Egern (v1.14.0+)"
 }
 
+# 查询当前连接数函数
+query_connections() {
+    echo "=== Hysteria 2 连接状态 ==="
+    
+    # 检查 Hysteria 服务是否运行
+    if ! systemctl is-active hysteria-server >/dev/null 2>&1; then
+        echo "Hysteria 服务未运行，无法查询连接数据"
+        return 1
+    fi
+    
+    # 获取 Hysteria 使用的端口
+    PORT=$(grep "listen:" /etc/hysteria/config.yaml | awk -F':' '{print $3}')
+    if [ -z "$PORT" ]; then
+        echo "无法从配置文件获取端口信息"
+        return 1
+    fi
+    
+    echo "正在查询端口 $PORT 的连接情况..."
+    
+    # 统计总连接数
+    TOTAL_CONN=$(netstat -anp | grep -c ":$PORT ")
+    # 统计不同的IP地址数量（即客户端数量）
+    UNIQUE_IPS=$(netstat -anp | grep ":$PORT " | awk '{print $5}' | cut -d: -f1 | sort | uniq | wc -l)
+    # 获取连接列表
+    CONN_LIST=$(netstat -anp | grep ":$PORT " | awk '{print $5}' | cut -d: -f1 | sort | uniq -c | sort -nr)
+    
+    echo "当前活跃连接总数: $TOTAL_CONN"
+    echo "当前连接的客户端数: $UNIQUE_IPS"
+    
+    # 显示最近的连接日志
+    echo -e "\n=== 最近连接日志 ==="
+    if [ -f "/var/log/syslog" ]; then
+        grep "hysteria" /var/log/syslog | grep "connection" | tail -n 10
+    elif [ -f "/var/log/messages" ]; then
+        grep "hysteria" /var/log/messages | grep "connection" | tail -n 10
+    else
+        journalctl -u hysteria-server | grep "connection" | tail -n 10
+    fi
+    
+    # 显示详细的连接列表
+    if [ ! -z "$CONN_LIST" ]; then
+        echo -e "\n=== 连接客户端列表 ==="
+        echo "数量 IP地址"
+        echo "$CONN_LIST"
+    fi
+    
+    # 显示系统负载
+    echo -e "\n=== 系统负载 ==="
+    uptime
+    
+    # 显示网络流量统计（如果安装了ifstat）
+    if command -v ifstat >/dev/null 2>&1; then
+        echo -e "\n=== 实时网络流量 (KB/s) ==="
+        ifstat -t 1 1
+    else
+        echo -e "\n提示: 安装 ifstat 可以查看实时网络流量统计"
+        echo "运行: apt-get install ifstat 或 yum install ifstat"
+    fi
+}
+
 # 主菜单循环
 while true; do
     show_menu
-    read -p "请输入选项 [0-3]: " choice
+    read -p "请输入选项 [0-4]: " choice
     
     case $choice in
         1)
@@ -768,6 +958,9 @@ while true; do
             ;;
         3)
             query_subscription
+            ;;
+        4)
+            query_connections
             ;;
         0)
             echo "退出脚本..."

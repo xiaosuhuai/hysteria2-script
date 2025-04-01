@@ -478,8 +478,23 @@ EOF
         SHADOWROCKET_URL="sub://${BASE64_URL}#Hysteria2-${SERVER_IP}"
     fi
 
-    # 生成配置文件
-    CLASH_CONFIG=$(cat << EOF
+    # 生成Clash配置文件头部
+    CLASH_CONFIG_HEADER=$(cat << EOF
+mixed-port: 7890
+allow-lan: true
+mode: rule
+log-level: info
+external-controller: 127.0.0.1:9090
+
+dns:
+  enable: true
+  listen: 0.0.0.0:53
+  enhanced-mode: fake-ip
+  nameserver:
+    - 223.5.5.5
+    - 119.29.29.29
+    - 114.114.114.114
+
 proxies:
   - name: "$VMESS_NAME"
     type: hysteria2
@@ -488,39 +503,71 @@ proxies:
     password: "${USER_PASSWORD}"
     sni: ${SERVER_IP}
     skip-cert-verify: true
+EOF
+)
 
+    # 下载ACL4SSR的规则配置
+    echo "正在获取ACL4SSR规则..."
+    
+    # 检查是否存在curl工具
+    if ! command -v curl &> /dev/null; then
+        apt update
+        apt install -y curl
+    fi
+    
+    # 下载clash规则配置
+    CLASH_RULES=$(curl -s https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Online_Mini.ini | grep -v "^\[" | grep -v "^;" | grep -v "^$")
+    
+    # 如果下载失败，使用备用方案
+    if [ -z "$CLASH_RULES" ]; then
+        echo "无法从GitHub获取规则，使用备用配置..."
+        
+        # 使用备用的简化规则
+        CLASH_RULES=$(cat << EOF
 proxy-groups:
-  - name: "🚀 节点选择"
+  - name: 🚀 节点选择
     type: select
     proxies:
       - "$VMESS_NAME"
       - DIRECT
-  - name: "🌍 国外网站"
+  - name: 🌍 国外网站
     type: select
     proxies:
-      - "🚀 节点选择"
+      - 🚀 节点选择
       - DIRECT
-  - name: "📲 电报信息"
+  - name: 📲 电报信息
     type: select
     proxies:
-      - "🚀 节点选择"
+      - 🚀 节点选择
       - DIRECT
-  - name: "🎬 国外媒体"
+  - name: 🎬 国外媒体
     type: select
     proxies:
-      - "🚀 节点选择"
+      - 🚀 节点选择
       - DIRECT
-  - name: "🌏 国内网站"
+  - name: 📹 YouTube
+    type: select
+    proxies:
+      - 🚀 节点选择
+      - DIRECT
+  - name: 🎥 Netflix
+    type: select
+    proxies:
+      - 🚀 节点选择
+      - DIRECT
+  - name: 🌏 国内网站
     type: select
     proxies:
       - DIRECT
-      - "🚀 节点选择"
+      - 🚀 节点选择
+  - name: 🐟 漏网之鱼
+    type: select
+    proxies:
+      - 🚀 节点选择
+      - DIRECT
 
 rules:
   - DOMAIN-SUFFIX,t.me,📲 电报信息
-  - DOMAIN-SUFFIX,tdesktop.com,📲 电报信息
-  - DOMAIN-SUFFIX,telegra.ph,📲 电报信息
-  - DOMAIN-SUFFIX,telegram.me,📲 电报信息
   - DOMAIN-SUFFIX,telegram.org,📲 电报信息
   - IP-CIDR,91.108.4.0/22,📲 电报信息
   - IP-CIDR,91.108.8.0/22,📲 电报信息
@@ -528,11 +575,12 @@ rules:
   - IP-CIDR,91.108.16.0/22,📲 电报信息
   - IP-CIDR,91.108.56.0/22,📲 电报信息
   - IP-CIDR,149.154.160.0/20,📲 电报信息
-  - DOMAIN-KEYWORD,youtube,🎬 国外媒体
-  - DOMAIN-KEYWORD,netflix,🎬 国外媒体
-  - DOMAIN-SUFFIX,googlevideo.com,🎬 国外媒体
-  - DOMAIN-SUFFIX,youtube.com,🎬 国外媒体
-  - DOMAIN-SUFFIX,googleapis.com,🌍 国外网站
+  - DOMAIN-KEYWORD,youtube,📹 YouTube
+  - DOMAIN-SUFFIX,youtube.com,📹 YouTube
+  - DOMAIN-SUFFIX,googlevideo.com,📹 YouTube
+  - DOMAIN-KEYWORD,netflix,🎥 Netflix
+  - DOMAIN-SUFFIX,netflix.com,🎥 Netflix
+  - DOMAIN-SUFFIX,netflix.net,🎥 Netflix
   - DOMAIN-SUFFIX,google.com,🌍 国外网站
   - DOMAIN-SUFFIX,gmail.com,🌍 国外网站
   - DOMAIN-SUFFIX,facebook.com,🌍 国外网站
@@ -540,10 +588,266 @@ rules:
   - DOMAIN-SUFFIX,instagram.com,🌍 国外网站
   - DOMAIN-SUFFIX,wikipedia.org,🌍 国外网站
   - DOMAIN-SUFFIX,reddit.com,🌍 国外网站
+  - DOMAIN-SUFFIX,spotify.com,🎬 国外媒体
+  - DOMAIN-SUFFIX,disney.com,🎬 国外媒体
+  - DOMAIN-SUFFIX,hbo.com,🎬 国外媒体
+  - DOMAIN-SUFFIX,hulu.com,🎬 国外媒体
   - GEOIP,CN,🌏 国内网站
-  - MATCH,🚀 节点选择
+  - MATCH,🐟 漏网之鱼
 EOF
-)
+        )
+    else
+        # 处理下载的规则，提取出proxy-groups和rules部分
+        echo "成功获取ACL4SSR规则，正在处理..."
+        
+        # 获取完整规则配置
+        ACL4SSR_CONFIG=$(curl -s https://raw.githubusercontent.com/ACL4SSR/ACL4SSR/master/Clash/config/ACL4SSR_Online_Mini_MultiMode.ini)
+        
+        # 构建规则
+        CLASH_RULES=$(cat << EOF
+proxy-groups:
+  - name: 🚀 节点选择
+    type: select
+    proxies:
+      - "$VMESS_NAME"
+      - DIRECT
+  - name: ♻️ 自动选择
+    type: url-test
+    url: http://www.gstatic.com/generate_204
+    interval: 300
+    tolerance: 50
+    proxies:
+      - "$VMESS_NAME"
+  - name: 🌍 国外媒体
+    type: select
+    proxies:
+      - 🚀 节点选择
+      - ♻️ 自动选择
+      - 🎯 全球直连
+  - name: 📲 电报信息
+    type: select
+    proxies:
+      - 🚀 节点选择
+      - 🎯 全球直连
+  - name: Ⓜ️ 微软服务
+    type: select
+    proxies:
+      - 🎯 全球直连
+      - 🚀 节点选择
+  - name: 🍎 苹果服务
+    type: select
+    proxies:
+      - 🚀 节点选择
+      - 🎯 全球直连
+  - name: 📢 谷歌FCM
+    type: select
+    proxies:
+      - 🚀 节点选择
+      - 🎯 全球直连
+  - name: 🎯 全球直连
+    type: select
+    proxies:
+      - DIRECT
+  - name: 🛑 全球拦截
+    type: select
+    proxies:
+      - REJECT
+      - DIRECT
+  - name: 🍃 应用净化
+    type: select
+    proxies:
+      - REJECT
+      - DIRECT
+  - name: 🐟 漏网之鱼
+    type: select
+    proxies:
+      - 🚀 节点选择
+      - 🎯 全球直连
+      
+rules:
+  - DOMAIN-SUFFIX,acl4.ssr,🎯 全球直连
+  - DOMAIN-SUFFIX,ip6-localhost,🎯 全球直连
+  - DOMAIN-SUFFIX,ip6-loopback,🎯 全球直连
+  - DOMAIN-SUFFIX,local,🎯 全球直连
+  - DOMAIN-SUFFIX,localhost,🎯 全球直连
+  - IP-CIDR,10.0.0.0/8,🎯 全球直连,no-resolve
+  - IP-CIDR,100.64.0.0/10,🎯 全球直连,no-resolve
+  - IP-CIDR,127.0.0.0/8,🎯 全球直连,no-resolve
+  - IP-CIDR,172.16.0.0/12,🎯 全球直连,no-resolve
+  - IP-CIDR,192.168.0.0/16,🎯 全球直连,no-resolve
+  - IP-CIDR,198.18.0.0/16,🎯 全球直连,no-resolve
+  - IP-CIDR6,::1/128,🎯 全球直连,no-resolve
+  - IP-CIDR6,fc00::/7,🎯 全球直连,no-resolve
+  - IP-CIDR6,fe80::/10,🎯 全球直连,no-resolve
+  - IP-CIDR6,fd00::/8,🎯 全球直连,no-resolve
+  - DOMAIN-SUFFIX,msftconnecttest.com,🎯 全球直连
+  - DOMAIN-SUFFIX,msftncsi.com,🎯 全球直连
+  - DOMAIN,api.steampowered.com,🎯 全球直连
+  - DOMAIN,download.jetbrains.com,🎯 全球直连
+  - DOMAIN-KEYWORD,1drv,Ⓜ️ 微软服务
+  - DOMAIN-KEYWORD,microsoft,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,aadrm.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,acompli.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,aspnetcdn.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,assets-yammer.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,azure.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,azure.net,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,azureedge.net,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,azurerms.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,bing.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,cloudapp.net,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,cloudappsecurity.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,edgesuite.net,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,gfx.ms,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,hotmail.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,live.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,live.net,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,lync.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,msappproxy.net,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,msauth.net,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,msauthimages.net,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,msecnd.net,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,msedge.net,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,msft.net,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,msftauth.net,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,msftauthimages.net,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,msftidentity.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,msidentity.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,msn.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,msocdn.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,msocsp.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,mstea.ms,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,o365weve.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,oaspapps.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,office.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,office.net,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,office365.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,officeppe.net,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,omniroot.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,onedrive.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,onenote.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,onenote.net,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,onestore.ms,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,outlook.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,outlookmobile.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,phonefactor.net,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,public-trust.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,sfbassets.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,sfx.ms,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,sharepoint.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,sharepointonline.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,skype.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,skypeassets.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,skypeforbusiness.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,staffhub.ms,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,svc.ms,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,sway-cdn.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,sway-extensions.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,sway.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,trafficmanager.net,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,uservoice.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,virtualearth.net,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,visualstudio.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,windows-ppe.net,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,windows.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,windows.net,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,windowsazure.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,windowsupdate.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,wunderlist.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,yammer.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,yammerusercontent.com,Ⓜ️ 微软服务
+  - DOMAIN,apple.comscoreresearch.com,🍎 苹果服务
+  - DOMAIN-KEYWORD,apple.com.akadns,🍎 苹果服务
+  - DOMAIN-KEYWORD,icloud.com.akadns,🍎 苹果服务
+  - DOMAIN-SUFFIX,aaplimg.com,🍎 苹果服务
+  - DOMAIN-SUFFIX,apple-cloudkit.com,🍎 苹果服务
+  - DOMAIN-SUFFIX,apple.co,🍎 苹果服务
+  - DOMAIN-SUFFIX,apple.com,🍎 苹果服务
+  - DOMAIN-SUFFIX,apple.com.cn,🍎 苹果服务
+  - DOMAIN-SUFFIX,appstore.com,🍎 苹果服务
+  - DOMAIN-SUFFIX,cdn-apple.com,🍎 苹果服务
+  - DOMAIN-SUFFIX,crashlytics.com,🍎 苹果服务
+  - DOMAIN-SUFFIX,icloud-content.com,🍎 苹果服务
+  - DOMAIN-SUFFIX,icloud.com,🍎 苹果服务
+  - DOMAIN-SUFFIX,icloud.com.cn,🍎 苹果服务
+  - DOMAIN-SUFFIX,itunes.com,🍎 苹果服务
+  - DOMAIN-SUFFIX,me.com,🍎 苹果服务
+  - DOMAIN-SUFFIX,mzstatic.com,🍎 苹果服务
+  - IP-CIDR,17.0.0.0/8,🍎 苹果服务,no-resolve
+  - IP-CIDR,63.92.224.0/19,🍎 苹果服务,no-resolve
+  - IP-CIDR,65.199.22.0/23,🍎 苹果服务,no-resolve
+  - IP-CIDR,139.178.128.0/18,🍎 苹果服务,no-resolve
+  - IP-CIDR,144.178.0.0/19,🍎 苹果服务,no-resolve
+  - IP-CIDR,144.178.36.0/22,🍎 苹果服务,no-resolve
+  - IP-CIDR,144.178.48.0/20,🍎 苹果服务,no-resolve
+  - IP-CIDR,192.35.50.0/24,🍎 苹果服务,no-resolve
+  - IP-CIDR,198.183.17.0/24,🍎 苹果服务,no-resolve
+  - IP-CIDR,205.180.175.0/24,🍎 苹果服务,no-resolve
+  - DOMAIN-SUFFIX,t.me,📲 电报信息
+  - DOMAIN-SUFFIX,tdesktop.com,📲 电报信息
+  - DOMAIN-SUFFIX,telegra.ph,📲 电报信息
+  - DOMAIN-SUFFIX,telegram.me,📲 电报信息
+  - DOMAIN-SUFFIX,telegram.org,📲 电报信息
+  - DOMAIN-SUFFIX,telesco.pe,📲 电报信息
+  - IP-CIDR,91.108.0.0/16,📲 电报信息,no-resolve
+  - IP-CIDR,109.239.140.0/24,📲 电报信息,no-resolve
+  - IP-CIDR,149.154.160.0/20,📲 电报信息,no-resolve
+  - IP-CIDR6,2001:67c:4e8::/48,📲 电报信息,no-resolve
+  - IP-CIDR6,2001:b28:f23d::/48,📲 电报信息,no-resolve
+  - IP-CIDR6,2001:b28:f23f::/48,📲 电报信息,no-resolve
+  - DOMAIN-SUFFIX,googlephotos.com,🌍 国外媒体
+  - DOMAIN-SUFFIX,youtube.com,🌍 国外媒体
+  - DOMAIN-SUFFIX,ytimg.com,🌍 国外媒体
+  - DOMAIN-SUFFIX,1drv.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,1drv.ms,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,blob.core.windows.net,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,livefilestore.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,onedrive.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,storage.live.com,Ⓜ️ 微软服务
+  - DOMAIN-SUFFIX,storage.msn.com,Ⓜ️ 微软服务
+  - DOMAIN-KEYWORD,1drv,Ⓜ️ 微软服务
+  - DOMAIN-KEYWORD,onedrive,Ⓜ️ 微软服务
+  - DOMAIN-KEYWORD,skydrive,Ⓜ️ 微软服务
+  - DOMAIN,c.amazon-adsystem.com,🛑 全球拦截
+  - DOMAIN-SUFFIX,ad.gt,🛑 全球拦截
+  - DOMAIN-SUFFIX,adsense.com,🛑 全球拦截
+  - DOMAIN-SUFFIX,adinplay.com,🛑 全球拦截
+  - DOMAIN-SUFFIX,adnxs.com,🛑 全球拦截
+  - DOMAIN-SUFFIX,adsafeprotected.com,🛑 全球拦截
+  - DOMAIN-SUFFIX,adservice.google.com,🛑 全球拦截
+  - DOMAIN-SUFFIX,adthrive.com,🛑 全球拦截
+  - DOMAIN-SUFFIX,adyoulike.com,🛑 全球拦截
+  - DOMAIN-SUFFIX,anyclip.com,🛑 全球拦截
+  - DOMAIN-SUFFIX,assets.adobedtm.com,🛑 全球拦截
+  - DOMAIN-SUFFIX,chartbeat.com,🛑 全球拦截
+  - DOMAIN-SUFFIX,doubleclick.net,🛑 全球拦截
+  - DOMAIN-SUFFIX,googlesyndication.com,🛑 全球拦截
+  - DOMAIN-SUFFIX,imasdk.googleapis.com,🛑 全球拦截
+  - DOMAIN-SUFFIX,indexww.com,🛑 全球拦截
+  - DOMAIN-SUFFIX,mfadsrvr.com,🛑 全球拦截
+  - DOMAIN-SUFFIX,permutive.com,🛑 全球拦截
+  - DOMAIN-SUFFIX,playwire.com,🛑 全球拦截
+  - DOMAIN-SUFFIX,taboola.com,🛑 全球拦截
+  - DOMAIN-SUFFIX,tv2.dk,🛑 全球拦截
+  - DOMAIN-SUFFIX,adcolony.com,🍃 应用净化
+  - DOMAIN-SUFFIX,adjust.com,🍃 应用净化
+  - DOMAIN-SUFFIX,airpr.com,🍃 应用净化
+  - DOMAIN-SUFFIX,hotjar.com,🍃 应用净化
+  - DOMAIN-SUFFIX,hotjar.io,🍃 应用净化
+  - DOMAIN-SUFFIX,hs-analytics.net,🍃 应用净化
+  - DOMAIN-SUFFIX,hubspot.com,🍃 应用净化
+  - DOMAIN-SUFFIX,intercom.io,🍃 应用净化
+  - DOMAIN-SUFFIX,ushareit.com,🍃 应用净化
+  - GEOIP,CN,🎯 全球直连
+  - MATCH,🐟 漏网之鱼
+EOF
+        )
+    fi
+
+    # 合并配置文件头部和规则
+    CLASH_CONFIG="${CLASH_CONFIG_HEADER}
+
+${CLASH_RULES}"
 
     # 创建订阅目录
     mkdir -p /etc/hysteria/subscribe

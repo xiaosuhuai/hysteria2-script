@@ -842,6 +842,94 @@ fi
 EOF
 
     chmod +x /usr/local/bin/hy2stat
+    
+    # 创建客户端 IP 查询脚本
+    cat > /usr/local/bin/hy2client << 'EOF'
+#!/bin/bash
+
+# 显示头部信息
+echo "=== Hysteria 2 客户端连接 ==="
+
+# 检查 Hysteria 服务是否运行
+if ! systemctl is-active hysteria-server >/dev/null 2>&1; then
+    echo "Hysteria 服务未运行，无法查询连接数据"
+    exit 1
+fi
+
+# 获取 Hysteria 使用的端口
+PORT=$(grep "listen:" /etc/hysteria/config.yaml | awk -F':' '{print $3}')
+if [ -z "$PORT" ]; then
+    echo "无法从配置文件获取端口信息"
+    exit 1
+fi
+
+echo "正在查询与端口 $PORT 建立连接的客户端..."
+
+# 使用 netstat 查找所有连接到服务端口的客户端 IP
+CLIENT_IPS=$(netstat -anp | grep "ESTABLISHED" | grep ":$PORT" | awk '{print $5}' | grep -v ":$PORT" | cut -d: -f1 | sort | uniq)
+
+# 统计客户端数量和每个客户端的连接数
+echo -e "\n=== 客户端连接情况 ==="
+echo "端口 $PORT 的客户端连接总数: $(echo "$CLIENT_IPS" | wc -l)"
+echo -e "\n客户端 IP 地址列表:"
+for IP in $CLIENT_IPS; do
+    CONN_COUNT=$(netstat -anp | grep "ESTABLISHED" | grep ":$PORT" | grep "$IP" | wc -l)
+    echo "$IP - $CONN_COUNT 个连接"
+done
+
+# 使用 ss 命令获取更详细的信息（如果可用）
+if command -v ss >/dev/null 2>&1; then
+    echo -e "\n=== 详细客户端连接信息 ==="
+    ss -tn state established "( dport = :$PORT )" | head -n 20
+    if [ $(ss -tn state established "( dport = :$PORT )" | wc -l) -gt 20 ]; then
+        echo "... (仅显示前20条记录)"
+    fi
+fi
+
+# 按客户端 IP 显示连接时长（如果 ss 命令支持）
+if command -v ss >/dev/null 2>&1 && ss --help 2>&1 | grep -q "\-o"; then
+    echo -e "\n=== 客户端连接时长 ==="
+    for IP in $CLIENT_IPS; do
+        echo -e "\n客户端 IP: $IP"
+        ss -tno state established "( dport = :$PORT )" | grep "$IP" | awk '{print $1, $2, $3, $4, $5}' | head -n 5
+        if [ $(ss -tno state established "( dport = :$PORT )" | grep "$IP" | wc -l) -gt 5 ]; then
+            echo "... (更多记录未显示)"
+        fi
+    done
+fi
+
+# 监控模式
+if [ "$1" = "-m" ] || [ "$1" = "--monitor" ]; then
+    echo -e "\n启动客户端监控模式。每10秒更新一次。按 Ctrl+C 退出。"
+    
+    while true; do
+        clear
+        date
+        echo "=== Hysteria 2 客户端实时监控 ==="
+        
+        CLIENT_IPS=$(netstat -anp | grep "ESTABLISHED" | grep ":$PORT" | awk '{print $5}' | grep -v ":$PORT" | cut -d: -f1 | sort | uniq)
+        
+        echo "当前连接的客户端数: $(echo "$CLIENT_IPS" | wc -l)"
+        echo -e "\n客户端 IP 地址列表:"
+        for IP in $CLIENT_IPS; do
+            CONN_COUNT=$(netstat -anp | grep "ESTABLISHED" | grep ":$PORT" | grep "$IP" | wc -l)
+            echo "$IP - $CONN_COUNT 个连接"
+        done
+        
+        sleep 10
+    done
+fi
+
+# 帮助信息
+if [ "$1" = "-h" ] || [ "$1" = "--help" ]; then
+    echo -e "\n使用方法:"
+    echo "  hy2client         - 显示客户端连接信息"
+    echo "  hy2client -m      - 持续监控客户端连接（每10秒更新一次）"
+    echo "  hy2client -h      - 显示此帮助信息"
+fi
+EOF
+
+    chmod +x /usr/local/bin/hy2client
 
     echo -e "\nHysteria 2 安装完成！"
     echo "配置文件位置：/etc/hysteria/config.yaml"
@@ -868,6 +956,7 @@ EOF
     echo "3. 订阅信息已保存到：/etc/hysteria/subscribe/"
     echo "4. 使用 'hy2sub' 命令可随时查看订阅信息"
     echo "5. 使用 'hy2stat' 命令可随时查看连接状态"
+    echo "6. 使用 'hy2client' 命令可查看客户端连接情况"
     echo -e "\n=== iOS 客户端支持 ==="
     echo "支持的客户端（版本要求）："
     echo "1. Shadowrocket (v2.2.35+) - 推荐，性价比高"

@@ -13,6 +13,7 @@ show_menu() {
     echo "2. 卸载服务"
     echo "3. 查询订阅"
     echo "4. 查询连接"
+    echo "5. 更新域名证书"
     echo "0. 退出脚本"
     echo "------------------------"
 }
@@ -235,6 +236,118 @@ pre_install_check() {
     echo "清理完成，准备开始安装..."
 }
 
+# 检查域名解析是否正确
+check_domain() {
+    local domain=$1
+    local expected_ip=$2
+    local resolved_ip
+    
+    echo "正在检查域名 $domain 的解析..."
+    
+    # 尝试使用 dig 获取域名解析
+    if command -v dig >/dev/null 2>&1; then
+        resolved_ip=$(dig +short "$domain" | grep -v "\.$" | head -n 1)
+    # 如果没有 dig，尝试使用 host
+    elif command -v host >/dev/null 2>&1; then
+        resolved_ip=$(host "$domain" | grep "has address" | head -n 1 | awk '{print $NF}')
+    # 如果都没有，尝试使用 nslookup
+    elif command -v nslookup >/dev/null 2>&1; then
+        resolved_ip=$(nslookup "$domain" | grep -A1 "Name:" | grep "Address:" | tail -n 1 | awk '{print $NF}')
+    else
+        echo "错误：未找到 DNS 查询工具，请安装 dig、host 或 nslookup"
+        return 1
+    fi
+    
+    if [ -z "$resolved_ip" ]; then
+        echo "错误：无法解析域名 $domain"
+        return 1
+    fi
+    
+    if [ "$resolved_ip" != "$expected_ip" ]; then
+        echo "错误：域名 $domain 解析到的 IP ($resolved_ip) 与服务器 IP ($expected_ip) 不匹配"
+        return 1
+    fi
+    
+    echo "域名解析检查通过"
+    return 0
+}
+
+# 申请 Let's Encrypt 证书
+setup_ssl() {
+    local domain=$1
+    
+    # 安装 certbot
+    if ! command -v certbot >/dev/null 2>&1; then
+        echo "正在安装 certbot..."
+        apt update
+        apt install -y certbot python3-certbot-nginx
+    fi
+    
+    # 申请证书
+    echo "正在申请 SSL 证书..."
+    if certbot certonly --nginx -d "$domain" --non-interactive --agree-tos --email "admin@$domain" --expand; then
+        echo "SSL 证书申请成功"
+        # 复制证书到 Hysteria 目录
+        cp "/etc/letsencrypt/live/$domain/fullchain.pem" /etc/hysteria/cert.crt
+        cp "/etc/letsencrypt/live/$domain/privkey.pem" /etc/hysteria/private.key
+        chmod 644 /etc/hysteria/cert.crt
+        chmod 600 /etc/hysteria/private.key
+        return 0
+    else
+        echo "SSL 证书申请失败"
+        return 1
+    fi
+}
+
+# 设置自动续期证书的 hook
+setup_renewal_hook() {
+    local domain=$1
+    cat > /etc/letsencrypt/renewal-hooks/deploy/hysteria.sh << EOF
+#!/bin/bash
+cp "/etc/letsencrypt/live/$domain/fullchain.pem" /etc/hysteria/cert.crt
+cp "/etc/letsencrypt/live/$domain/privkey.pem" /etc/hysteria/private.key
+chmod 644 /etc/hysteria/cert.crt
+chmod 600 /etc/hysteria/private.key
+systemctl restart hysteria-server
+EOF
+    chmod +x /etc/letsencrypt/renewal-hooks/deploy/hysteria.sh
+}
+
+# 更新证书函数
+update_cert() {
+    if [ ! -f "/etc/hysteria/config.yaml" ]; then
+        echo "未找到 Hysteria 配置文件，请先安装 Hysteria"
+        return 1
+    fi
+    
+    # 获取当前域名
+    local current_domain=$(grep "sni:" /etc/hysteria/config.yaml | awk '{print $2}')
+    if [ -z "$current_domain" ]; then
+        echo "未找到配置的域名"
+        return 1
+    fi
+    
+    echo "当前域名: $current_domain"
+    echo "正在更新证书..."
+    
+    if certbot renew --force-renewal -d "$current_domain"; then
+        echo "证书更新成功"
+        # 复制新证书
+        cp "/etc/letsencrypt/live/$current_domain/fullchain.pem" /etc/hysteria/cert.crt
+        cp "/etc/letsencrypt/live/$current_domain/privkey.pem" /etc/hysteria/private.key
+        chmod 644 /etc/hysteria/cert.crt
+        chmod 600 /etc/hysteria/private.key
+        
+        # 重启服务
+        systemctl restart hysteria-server
+        echo "服务已重启，新证书生效"
+        return 0
+    else
+        echo "证书更新失败"
+        return 1
+    fi
+}
+
 # 安装函数
 install_hysteria() {
     # 执行安装前检查
@@ -243,6 +356,31 @@ install_hysteria() {
     # 设置变量
     SERVER_IP=$(curl -s https://api.ipify.org) # 自动获取服务器公网IP
     echo "检测到服务器IP: $SERVER_IP"
+
+    # 询问是否使用域名
+    read -p "是否使用域名？[y/N]: " USE_DOMAIN
+    if [[ $USE_DOMAIN =~ ^[Yy]$ ]]; then
+        while true; do
+            read -p "请输入您的域名: " DOMAIN
+            if [ -z "$DOMAIN" ]; then
+                echo "域名不能为空，请重新输入"
+                continue
+            fi
+            
+            # 检查域名解析
+            if check_domain "$DOMAIN" "$SERVER_IP"; then
+                break
+            else
+                echo "请确保域名已正确解析到服务器IP后再继续"
+                read -p "是否重新输入域名？[Y/n]: " retry_domain
+                if [[ $retry_domain =~ ^[Nn]$ ]]; then
+                    echo "将使用服务器IP继续安装"
+                    DOMAIN=""
+                    break
+                fi
+            fi
+        done
+    fi
 
     # 提示用户输入端口
     while true; do
@@ -282,23 +420,44 @@ install_hysteria() {
     fi
 
     # 询问用户是否使用HTTPS
-    echo "提示：订阅链接使用HTTP更易于客户端导入，HTTPS可能会因自签名证书导致导入失败"
-    read -p "是否为订阅链接启用HTTPS? (自签名证书可能导致导入问题) [y/N]: " USE_HTTPS_CHOICE
-    if [[ $USE_HTTPS_CHOICE =~ ^[Yy]$ ]]; then
-        echo "将为订阅链接启用HTTPS..."
-        echo "警告：如果订阅导入失败，请尝试关闭证书验证或重新安装并选择HTTP"
-        USE_HTTPS="true"
+    if [ -z "$DOMAIN" ]; then
+        echo "提示：订阅链接使用HTTP更易于客户端导入，HTTPS可能会因自签名证书导致导入失败"
+        read -p "是否为订阅链接启用HTTPS? (自签名证书可能导致导入问题) [y/N]: " USE_HTTPS_CHOICE
+        if [[ $USE_HTTPS_CHOICE =~ ^[Yy]$ ]]; then
+            echo "将为订阅链接启用HTTPS..."
+            echo "警告：如果订阅导入失败，请尝试关闭证书验证或重新安装并选择HTTP"
+            USE_HTTPS="true"
+        else
+            echo "将使用HTTP协议用于订阅链接..."
+            USE_HTTPS="false"
+        fi
     else
-        echo "将使用HTTP协议用于订阅链接..."
-        USE_HTTPS="false"
+        USE_HTTPS="true"
     fi
 
     # 安装必要的软件包
     apt update
-    apt install -y curl openssl net-tools lsof nginx apache2-utils qrencode ifstat iftop
+    apt install -y curl openssl net-tools lsof nginx apache2-utils qrencode ifstat iftop dnsutils
 
     # 检查 Nginx 状态
     check_nginx
+
+    # 如果使用域名，设置SSL证书
+    if [ ! -z "$DOMAIN" ]; then
+        if ! setup_ssl "$DOMAIN"; then
+            echo "SSL证书配置失败，退出安装"
+            return 1
+        fi
+        setup_renewal_hook "$DOMAIN"
+    else
+        # 生成自签名证书
+        openssl req -x509 -nodes -newkey rsa:2048 -days 365 \
+            -keyout /etc/hysteria/private.key -out /etc/hysteria/cert.crt \
+            -subj "/CN=${SERVER_IP}"
+        
+        chmod 644 /etc/hysteria/cert.crt
+        chmod 600 /etc/hysteria/private.key
+    fi
 
     # 配置防火墙
     echo "配置防火墙规则..."
@@ -344,15 +503,6 @@ install_hysteria() {
     # 创建证书目录
     mkdir -p /etc/hysteria
 
-    # 生成自签名证书
-    openssl req -x509 -nodes -newkey rsa:2048 -days 365 \
-        -keyout /etc/hysteria/private.key -out /etc/hysteria/cert.crt \
-        -subj "/CN=${SERVER_IP}"
-
-    # 设置证书权限
-    chmod 644 /etc/hysteria/cert.crt
-    chmod 600 /etc/hysteria/private.key
-
     # 安装 Hysteria 2
     echo "安装 Hysteria 2..."
     curl -fsSL https://get.hy2.sh/ | bash
@@ -387,6 +537,11 @@ tls:
   cert: /etc/hysteria/cert.crt
   key: /etc/hysteria/private.key
 EOF
+
+    # 如果使用域名，添加SNI配置
+    if [ ! -z "$DOMAIN" ]; then
+        echo "  sni: ${DOMAIN}" >> /etc/hysteria/config.yaml
+    fi
 
     # 创建 systemd 服务
     cat > /etc/systemd/system/hysteria-server.service << EOF
@@ -847,49 +1002,27 @@ ${CLASH_RULES}"
     echo "$CLASH_CONFIG" > /etc/hysteria/subscribe/clash.yaml
 
     # 配置 Nginx
-    cat > /etc/nginx/conf.d/default.conf << EOF
-server {
-    listen 80 default_server;
-    server_name _;
-    charset utf-8;
-    
-    access_log /var/log/nginx/default-access.log;
-    error_log /var/log/nginx/default-error.log;
-
-    location / {
-        return 404;
-    }
-}
-EOF
-
-    if [ "$USE_HTTPS" = "true" ]; then
+    if [ ! -z "$DOMAIN" ]; then
         cat > /etc/nginx/conf.d/hysteria-subscribe.conf << EOF
 server {
     listen 80;
-    server_name ${SERVER_IP};
-    charset utf-8;
+    server_name ${DOMAIN};
     
     # 将HTTP请求重定向到HTTPS
     location / {
-        return 301 https://${SERVER_IP}\$request_uri;
+        return 301 https://\$server_name\$request_uri;
     }
 }
 
 server {
     listen 443 ssl;
-    server_name ${SERVER_IP};
-    charset utf-8;
+    server_name ${DOMAIN};
     
-    ssl_certificate /etc/nginx/cert.crt;
-    ssl_certificate_key /etc/nginx/private.key;
+    ssl_certificate /etc/letsencrypt/live/${DOMAIN}/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/${DOMAIN}/privkey.pem;
     ssl_protocols TLSv1.2 TLSv1.3;
-    ssl_prefer_server_ciphers on;
     
-    access_log /var/log/nginx/hysteria-subscribe-access.log;
-    error_log /var/log/nginx/hysteria-subscribe-error.log;
-
     location /${SUBSCRIBE_PATH}/clash {
-        # 移除基本身份验证，使用随机路径作为安全措施
         alias /etc/hysteria/subscribe/clash.yaml;
         default_type text/plain;
         add_header Content-Type 'text/plain; charset=utf-8';
@@ -1244,6 +1377,11 @@ EOF
     chmod +x /usr/local/bin/hy2client
 
     echo -e "\nHysteria 2 安装完成！"
+    if [ ! -z "$DOMAIN" ]; then
+        echo "域名：$DOMAIN"
+        echo "证书位置：/etc/hysteria/cert.crt"
+        echo "证书自动续期已配置"
+    fi
     echo "配置文件位置：/etc/hysteria/config.yaml"
     echo -e "\n=== 连接信息 ==="
     echo "服务器IP：$SERVER_IP"
@@ -1343,7 +1481,7 @@ query_connections() {
 # 主菜单循环
 while true; do
     show_menu
-    read -p "请输入选项 [0-4]: " choice
+    read -p "请输入选项 [0-5]: " choice
     
     case $choice in
         1)
@@ -1362,6 +1500,9 @@ while true; do
             ;;
         4)
             query_connections
+            ;;
+        5)
+            update_cert
             ;;
         0)
             echo "退出脚本..."

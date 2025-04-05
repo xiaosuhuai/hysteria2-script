@@ -1508,57 +1508,62 @@ query_connections() {
 }
 
 # 主菜单循环
-while true; do
-    show_menu
-    read -p "请输入选项 [0-9]: " choice
-    
-    case $choice in
-        1)
-            echo "开始安装 Hysteria 2..."
-            install_hysteria
-            ;;
-        2)
-            echo "即将卸载 Hysteria 2..."
-            read -p "确定要卸载吗？(y/n): " confirm
-            if [[ $confirm =~ ^[Yy]$ ]]; then
-                uninstall_hysteria
-            fi
-            ;;
-        3)
-            query_subscription
-            ;;
-        4)
-            query_connections
-            ;;
-        5)
-            update_cert
-            ;;
-        6)
-            echo "开始安装 FRP 服务端..."
-            install_frps
-            ;;
-        7)
-            echo "即将卸载 FRP 服务端..."
-            read -p "确定要卸载吗？(y/n): " confirm
-            if [[ $confirm =~ ^[Yy]$ ]]; then
-                uninstall_frps
-            fi
-            ;;
-        8)
-            show_frps_config
-            ;;
-        9)
-            update_frps_config
-            ;;
-        0)
-            echo "退出脚本..."
-            exit 0
-            ;;
-        *)
-            echo "无效的选项，请重新选择"
-            ;;
-    esac
-    
-    echo -e "\n按回车键继续..."
-    read
-done 
+main() {
+    while true; do
+        show_menu
+        read -p "请输入选项 [0-9]: " choice
+        
+        case $choice in
+            1)
+                echo "开始安装 Hysteria 2..."
+                install_hysteria
+                ;;
+            2)
+                echo "即将卸载 Hysteria 2..."
+                read -p "确定要卸载吗？(y/n): " confirm
+                if [[ $confirm =~ ^[Yy]$ ]]; then
+                    uninstall_hysteria
+                fi
+                ;;
+            3)
+                query_subscription
+                ;;
+            4)
+                query_connections
+                ;;
+            5)
+                update_cert
+                ;;
+            6)
+                echo "开始安装 FRP 服务端..."
+                install_frps
+                ;;
+            7)
+                echo "即将卸载 FRP 服务端..."
+                read -p "确定要卸载吗？(y/n): " confirm
+                if [[ $confirm =~ ^[Yy]$ ]]; then
+                    uninstall_frps
+                fi
+                ;;
+            8)
+                show_frps_config
+                ;;
+            9)
+                update_frps_config
+                ;;
+            0)
+                echo "退出脚本..."
+                exit 0
+                ;;
+            *)
+                echo "无效的选项，请重新选择"
+                ;;
+        esac
+        
+        echo -e "\n按回车键继续..."
+        read
+    done
+}
+
+# 调用主函数
+main

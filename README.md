@@ -1,12 +1,12 @@
-# Hysteria 2 一键脚本
+# VPN 工具一键安装脚本
 
-> A powerful, lightning fast and censorship resistant proxy.
-> 
-> by Aperture Internet Laboratory <https://github.com/apernet>
+这个仓库包含两个强大的网络工具的一键安装脚本：
+1. Hysteria 2 - 强大的代理工具
+2. FRP - 高性能的内网穿透工具
 
-一个适用于个人使用的 Hysteria 2 一键安装脚本。基于 Hysteria 2.6.1 版本。
+## Hysteria 2 安装
 
-## 功能特点
+### 功能特点
 
 - 一键安装/卸载 Hysteria 2 服务
 - 自动配置 Nginx 订阅服务
@@ -14,24 +14,14 @@
 - 支持扫码导入配置（小火箭）
 - 开机自启动
 
-## 使用方法
+### 安装命令
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/xiaosuhuai/hysteria2-script/main/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/xiaosuhuai/vpn/main/install.sh)
 ```
 
-## 菜单选项
-
-1. 全新安装
-2. 卸载服务
-3. 查询订阅
-0. 退出脚本
-
-## 客户端支持
-
-推荐使用 Shadowrocket (小火箭)，简单好用。
-
-其他支持的客户端：
+### 支持的客户端
+- Shadowrocket (小火箭)（推荐）
 - Stash (v2.5.0+)
 - Loon (v3.1.3+)
 - Surge (v5.8.0+)
@@ -39,86 +29,85 @@ bash <(curl -fsSL https://raw.githubusercontent.com/xiaosuhuai/hysteria2-script/
 - Pharos Pro (v1.8.3+)
 - Egern (v1.14.0+)
 
-## 注意事项
+## FRP 服务端安装
 
-- 仅支持 x86_64 或 aarch64 架构
-- 需要 root 权限运行
-- 使用自签证书，请在客户端中开启"跳过证书验证"
+### 功能特点
 
-## 系统要求
+- 一键安装/配置 FRP 服务端
+- 自动获取最新版本
+- 自动配置系统服务
+- 自动配置防火墙规则
+- 支持 Dashboard 管理面板
+- 开机自启动
 
-- 支持的操作系统：Ubuntu、Debian、CentOS、RHEL
-- 需要所选端口未被占用
-
-## 快速开始
-
-### 方法 1：直接运行（推荐）
+### 安装命令
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/xiaosuhuai/hysteria2-script/main/install.sh)
+bash <(curl -fsSL https://raw.githubusercontent.com/xiaosuhuai/vpn/main/install-frps.sh)
 ```
 
-### 方法 2：手动安装
+## 手动安装方法
 
 1. 克隆仓库：
 ```bash
-git clone https://github.com/xiaosuhuai/hysteria2-script.git
+git clone https://github.com/xiaosuhuai/vpn.git
 ```
 
 2. 进入目录：
 ```bash
-cd hysteria2-script
+cd vpn
 ```
 
-3. 运行安装脚本：
+3. 选择要安装的工具：
 ```bash
+# 安装 Hysteria 2
 bash install.sh
+
+# 或安装 FRP 服务端
+bash install-frps.sh
 ```
 
-## 使用说明
+## 系统要求
 
-1. 运行脚本时，系统会提示你输入服务端口
-   - 直接回车将使用默认端口443
-   - 也可以输入1-65535之间的任意未被占用的端口
-2. 然后会提示你输入访问密码
-   - 如果直接回车，系统会自动生成一个随机密码
-   - 也可以输入自定义的密码
-3. 安装完成后会显示所有配置信息
+- 支持的操作系统：Ubuntu、Debian、CentOS
+- 需要 root 权限运行
+- 需要所选端口未被占用
 
-## 配置信息
-
-安装完成后，脚本会显示以下信息：
-
-- 服务器 IP 地址
-- 端口号（自定义或默认443）
-- 访问密码（自定义或随机生成）
-- 订阅链接
-
-所有配置文件都保存在 `/etc/hysteria/` 目录下：
+## Hysteria 2 配置
 
 - 配置文件：`/etc/hysteria/config.yaml`
 - 证书文件：`/etc/hysteria/cert.crt`
 - 私钥文件：`/etc/hysteria/private.key`
-- 订阅链接：`/etc/hysteria/subscription.txt`
+- 订阅目录：`/etc/hysteria/subscribe/`
 
-## 服务管理
-
+### 服务管理
 ```bash
-# 启动服务
-systemctl start hysteria-server
-
-# 停止服务
-systemctl stop hysteria-server
-
-# 重启服务
-systemctl restart hysteria-server
-
-# 查看服务状态
+systemctl start/stop/restart hysteria-server
 systemctl status hysteria-server
-
-# 查看服务日志
-journalctl -u hysteria-server
 ```
+
+## FRP 配置
+
+- 主配置文件：`/etc/frp/frps.ini`
+- 服务文件：`/etc/systemd/system/frps.service`
+- 日志文件：`/var/log/frps.log`
+
+### 服务管理
+```bash
+systemctl start/stop/restart frps
+systemctl status frps
+```
+
+## 注意事项
+
+1. 两个服务可以共存，但请注意：
+   - 使用不同的端口
+   - 合理分配系统资源
+   - 正确配置防火墙规则
+2. 安装前请确保：
+   - 系统已安装基本工具（curl、wget、tar）
+   - 所需端口未被占用
+   - 有足够的系统资源
 
 ## 问题反馈
 

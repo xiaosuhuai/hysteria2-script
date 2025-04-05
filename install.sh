@@ -357,6 +357,17 @@ install_hysteria() {
     SERVER_IP=$(curl -s https://api.ipify.org) # 自动获取服务器公网IP
     echo "检测到服务器IP: $SERVER_IP"
 
+    # 安装必要的软件包
+    echo "安装必要的软件包..."
+    apt update
+    apt install -y curl openssl net-tools lsof nginx apache2-utils qrencode ifstat iftop dnsutils iptables
+
+    # 创建必要的目录
+    echo "创建必要的目录..."
+    mkdir -p /etc/hysteria
+    mkdir -p /etc/hysteria/subscribe
+    mkdir -p /etc/letsencrypt/renewal-hooks/deploy
+
     # 询问是否使用域名
     read -p "是否使用域名？[y/N]: " USE_DOMAIN
     if [[ $USE_DOMAIN =~ ^[Yy]$ ]]; then
@@ -435,10 +446,6 @@ install_hysteria() {
         USE_HTTPS="true"
     fi
 
-    # 安装必要的软件包
-    apt update
-    apt install -y curl openssl net-tools lsof nginx apache2-utils qrencode ifstat iftop dnsutils
-
     # 检查 Nginx 状态
     check_nginx
 
@@ -448,9 +455,16 @@ install_hysteria() {
             echo "SSL证书配置失败，退出安装"
             return 1
         fi
+        # 确保证书目录存在并复制证书
+        mkdir -p /etc/hysteria
+        cp "/etc/letsencrypt/live/$DOMAIN/fullchain.pem" /etc/hysteria/cert.crt
+        cp "/etc/letsencrypt/live/$DOMAIN/privkey.pem" /etc/hysteria/private.key
+        chmod 644 /etc/hysteria/cert.crt
+        chmod 600 /etc/hysteria/private.key
         setup_renewal_hook "$DOMAIN"
     else
         # 生成自签名证书
+        mkdir -p /etc/hysteria
         openssl req -x509 -nodes -newkey rsa:2048 -days 365 \
             -keyout /etc/hysteria/private.key -out /etc/hysteria/cert.crt \
             -subj "/CN=${SERVER_IP}"
@@ -474,17 +488,26 @@ install_hysteria() {
         fi
         echo "UFW 防火墙规则已配置"
     else
+        # 确保 iptables 已安装
+        if ! command -v iptables >/dev/null 2>&1; then
+            echo "安装 iptables..."
+            apt update
+            apt install -y iptables
+        fi
+        
         # 使用 iptables
         iptables -I INPUT -p tcp --dport ${USER_PORT} -j ACCEPT
         iptables -I INPUT -p udp --dport ${USER_PORT} -j ACCEPT
         iptables -I INPUT -p tcp --dport 80 -j ACCEPT
         iptables -I INPUT -p tcp --dport 443 -j ACCEPT
+        
         # 保存 iptables 规则
         if command -v iptables-save >/dev/null 2>&1; then
             if [ -d "/etc/iptables" ]; then
                 iptables-save > /etc/iptables/rules.v4
             else
-                iptables-save > /etc/iptables.rules
+                mkdir -p /etc/iptables
+                iptables-save > /etc/iptables/rules.v4
             fi
         fi
         echo "iptables 防火墙规则已配置"

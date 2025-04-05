@@ -8,12 +8,18 @@ fi
 
 # 显示菜单
 show_menu() {
-    echo -e "\n=== Hysteria 2 管理脚本 ==="
-    echo "1. 全新安装"
-    echo "2. 卸载服务"
-    echo "3. 查询订阅"
-    echo "4. 查询连接"
+    echo -e "\n=== 网络工具管理脚本 ==="
+    echo "--- Hysteria 2 管理 ---"
+    echo "1. 安装 Hysteria 2"
+    echo "2. 卸载 Hysteria 2"
+    echo "3. 查询 Hysteria 2 订阅"
+    echo "4. 查询 Hysteria 2 连接"
     echo "5. 更新域名证书"
+    echo "--- FRP 管理 ---"
+    echo "6. 安装 FRP 服务端"
+    echo "7. 卸载 FRP 服务端"
+    echo "8. 查看 FRP 配置"
+    echo "9. 更新 FRP 配置"
     echo "0. 退出脚本"
     echo "------------------------"
 }

@@ -1510,11 +1510,11 @@ query_connections() {
 # 主菜单循环
 while true; do
     show_menu
-    read -p "请输入选项 [0-5]: " choice
+    read -p "请输入选项 [0-9]: " choice
     
     case $choice in
         1)
-            echo "开始全新安装..."
+            echo "开始安装 Hysteria 2..."
             install_hysteria
             ;;
         2)
@@ -1532,6 +1532,23 @@ while true; do
             ;;
         5)
             update_cert
+            ;;
+        6)
+            echo "开始安装 FRP 服务端..."
+            install_frps
+            ;;
+        7)
+            echo "即将卸载 FRP 服务端..."
+            read -p "确定要卸载吗？(y/n): " confirm
+            if [[ $confirm =~ ^[Yy]$ ]]; then
+                uninstall_frps
+            fi
+            ;;
+        8)
+            show_frps_config
+            ;;
+        9)
+            update_frps_config
             ;;
         0)
             echo "退出脚本..."

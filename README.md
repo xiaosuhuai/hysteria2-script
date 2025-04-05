@@ -37,13 +37,44 @@ bash <(curl -fsSL https://raw.githubusercontent.com/xiaosuhuai/vpn/main/install.
 - 自动获取最新版本
 - 自动配置系统服务
 - 自动配置防火墙规则
-- 支持 Dashboard 管理面板
+- 支持 Web 管理面板
+- 支持 HTTPS 反向代理（基于 Nginx）
 - 开机自启动
+- 低内存占用（适合小内存VPS）
 
 ### 安装命令
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/xiaosuhuai/vpn/main/install-frps.sh)
+```
+
+### 内网穿透配置示例
+
+1. HTTP 服务穿透：
+```ini
+[web]
+type = http
+local_ip = 127.0.0.1
+local_port = 80
+custom_domains = web.yourdomain.com
+```
+
+2. HTTPS 服务穿透：
+```ini
+[web-https]
+type = https
+local_ip = 127.0.0.1
+local_port = 443
+custom_domains = secure.yourdomain.com
+```
+
+3. TCP 服务穿透（如 SSH）：
+```ini
+[ssh]
+type = tcp
+local_ip = 127.0.0.1
+local_port = 22
+remote_port = 6000
 ```
 
 ## 手动安装方法
@@ -70,6 +101,10 @@ bash install-frps.sh
 ## 系统要求
 
 - 支持的操作系统：Ubuntu、Debian、CentOS
+- 最低配置要求：
+  - CPU: 1核
+  - 内存: 512MB 及以上
+  - 硬盘: 10GB 及以上
 - 需要 root 权限运行
 - 需要所选端口未被占用
 
@@ -91,11 +126,32 @@ systemctl status hysteria-server
 - 主配置文件：`/etc/frp/frps.ini`
 - 服务文件：`/etc/systemd/system/frps.service`
 - 日志文件：`/var/log/frps.log`
+- Nginx 配置：`/etc/nginx/conf.d/frp-panel.conf`
 
 ### 服务管理
 ```bash
+# FRP 服务管理
 systemctl start/stop/restart frps
 systemctl status frps
+
+# Nginx 服务管理
+systemctl start/stop/restart nginx
+systemctl status nginx
+```
+
+### SSL 证书配置
+如果需要配置 HTTPS，可以使用以下方法：
+
+1. 使用 Let's Encrypt：
+```bash
+apt install certbot python3-certbot-nginx
+certbot --nginx -d your.domain.com
+```
+
+2. 使用自签名证书：
+```bash
+openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+  -keyout /etc/nginx/cert.key -out /etc/nginx/cert.crt
 ```
 
 ## 注意事项
@@ -108,6 +164,10 @@ systemctl status frps
    - 系统已安装基本工具（curl、wget、tar）
    - 所需端口未被占用
    - 有足够的系统资源
+3. 内存优化建议：
+   - 启用 swap 分区（建议 2GB）
+   - 调整系统 TCP 参数优化网络性能
+   - 使用 Nginx 压缩功能减少带宽占用
 
 ## 问题反馈
 

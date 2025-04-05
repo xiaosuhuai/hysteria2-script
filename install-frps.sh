@@ -94,30 +94,20 @@ download_and_install() {
 
 # 配置frps
 configure_frps() {
-    echo -e "${YELLOW}配置frps参数：${PLAIN}"
+    echo -e "${GREEN}使用安全的默认配置...${PLAIN}"
     
-    read -p "请输入frps绑定端口 [7000]: " bind_port
-    bind_port=${bind_port:-7000}
+    # 使用固定的安全端口
+    bind_port=7000
+    vhost_http_port=8080
+    vhost_https_port=4430
+    dashboard_port=7500
     
-    read -p "请输入HTTP穿透端口 [8080]: " vhost_http_port
-    vhost_http_port=${vhost_http_port:-8080}
+    # 生成随机用户名和密码
+    dashboard_user=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 8 | head -n 1)
+    dashboard_pwd=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9!@#$%^&*()' | fold -w 16 | head -n 1)
     
-    read -p "请输入HTTPS穿透端口 [4430]: " vhost_https_port
-    vhost_https_port=${vhost_https_port:-4430}
-    
-    read -p "请输入面板端口 [7500]: " dashboard_port
-    dashboard_port=${dashboard_port:-7500}
-    
-    read -p "请输入面板用户名 [admin]: " dashboard_user
-    dashboard_user=${dashboard_user:-admin}
-    
-    read -p "请输入面板密码 [admin]: " dashboard_pwd
-    dashboard_pwd=${dashboard_pwd:-admin}
-    
-    read -p "请输入Token [随机生成]: " token
-    if [[ -z "$token" ]]; then
-        token=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 32 | head -n 1)
-    fi
+    # 生成随机Token
+    token=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9!@#$%^&*()' | fold -w 32 | head -n 1)
     
     # 生成配置文件
     cat > /etc/frp/frps.ini << EOF
@@ -138,12 +128,55 @@ log_max_days = 3
 # 连接池
 max_pool_count = 50
 
-# 允许的端口范围
-allow_ports = 1-65535
+# 允许的端口范围（限制为常用端口）
+allow_ports = 1024-65535
 
-# 心跳超时
-heartbeat_timeout = 90
+# 安全配置
+authentication_method = token
+authenticate_heartbeats = true
+authenticate_new_work_conns = true
+
+# 心跳配置
+heartbeat_timeout = 30
+heartbeat_interval = 10
+
+# 带宽限制（单位：KB/MB）
+max_bandwidth_per_client = "1MB"
+
+# TLS配置
+tls_only = true
+tls_cert_file = /etc/frp/server.crt
+tls_key_file = /etc/frp/server.key
 EOF
+
+    # 生成自签名证书
+    openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
+        -subj "/C=US/ST=NA/L=NA/O=FRP/CN=frps.local" \
+        -keyout /etc/frp/server.key -out /etc/frp/server.crt
+
+    echo -e "${GREEN}已配置安全的默认参数：${PLAIN}"
+    echo -e "frps端口：${bind_port}"
+    echo -e "HTTP端口：${vhost_http_port}"
+    echo -e "HTTPS端口：${vhost_https_port}"
+    echo -e "面板端口：${dashboard_port}"
+    echo -e "面板用户名：${dashboard_user}"
+    echo -e "面板密码：${dashboard_pwd}"
+    echo -e "Token：${token}"
+    
+    # 保存配置信息到文件
+    cat > /etc/frp/credentials.txt << EOF
+FRP服务器配置信息
+------------------------
+面板地址：http://$(curl -s ip.sb):${dashboard_port}
+面板用户名：${dashboard_user}
+面板密码：${dashboard_pwd}
+Token：${token}
+------------------------
+请妥善保管此文件！
+EOF
+    
+    chmod 600 /etc/frp/credentials.txt
+    echo -e "${GREEN}配置信息已保存到 /etc/frp/credentials.txt${PLAIN}"
 }
 
 # 配置Nginx

@@ -190,6 +190,7 @@ log_file = /var/log/frps.log
 log_level = info
 log_max_days = 3
 tcp_mux = true
+subdomain_host = suhuai.top
 EOL
     
     # 创建systemd服务

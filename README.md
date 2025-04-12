@@ -1,27 +1,47 @@
-# VPN 工具一键安装脚本
+# Hysteria 2 一键安装脚本
 
-这个仓库包含两个强大的网络工具的一键安装脚本：
-1. Hysteria 2 - 强大的代理工具
-2. FRP - 高性能的内网穿透工具
+这是一个用于快速安装和管理 Hysteria 2 代理服务器的 Shell 脚本。Hysteria 2 是一个强大的、快速的、抗审查的代理工具。
 
-## Hysteria 2 安装
+## 功能特点
 
-### 功能特点
+- ✨ 一键安装 Hysteria 2 服务器
+- 🔄 自动配置 HTTPS 证书
+- 🚀 支持自定义端口和配置
+- 📊 内置连接状态监控
+- 🔐 自动生成安全配置
+- 📱 支持多种客户端订阅格式
+- 🛡️ 自动配置防火墙规则
 
-- 一键安装/卸载 Hysteria 2 服务
-- 自动配置 Nginx 订阅服务
-- 生成 Clash 和小火箭订阅链接
-- 支持扫码导入配置（小火箭）
-- 开机自启动
+## 系统要求
 
-### 安装命令
+- 操作系统：基于 Debian/Ubuntu 的 Linux 系统
+- 需要 root 权限
+- 需要一个域名（可选，但推荐使用）
+
+## 快速开始
+
+### 安装
+
+使用以下命令一键安装：
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/xiaosuhuai/vpn/main/install.sh)
 ```
 
-### 支持的客户端
-- Shadowrocket (小火箭)（推荐）
+### 使用说明
+
+安装完成后，脚本提供以下功能：
+
+1. 安装 Hysteria 2
+2. 卸载 Hysteria 2
+3. 查询 Hysteria 2 订阅
+4. 查询 Hysteria 2 连接
+5. 更新域名证书
+
+## 客户端支持
+
+支持的客户端包括：
+- Shadowrocket (v2.2.35+)
 - Stash (v2.5.0+)
 - Loon (v3.1.3+)
 - Surge (v5.8.0+)
@@ -29,150 +49,44 @@ bash <(curl -fsSL https://raw.githubusercontent.com/xiaosuhuai/vpn/main/install.
 - Pharos Pro (v1.8.3+)
 - Egern (v1.14.0+)
 
-## FRP 服务端安装
+## 配置文件位置
 
-### 功能特点
+- 主配置文件：`/etc/hysteria/config.yaml`
+- 证书文件：`/etc/hysteria/cert.crt` 和 `/etc/hysteria/private.key`
+- 订阅配置：`/etc/hysteria/subscribe/`
 
-- 一键安装/配置 FRP 服务端
-- 自动获取最新版本
-- 自动配置系统服务
-- 自动配置防火墙规则
-- 支持 Web 管理面板
-- 支持 HTTPS 反向代理（基于 Nginx）
-- 开机自启动
-- 低内存占用（适合小内存VPS）
-
-### 安装命令
+## 常用命令
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/xiaosuhuai/vpn/main/install-frps.sh)
+# 查看订阅信息
+hy2sub
+
+# 查看连接状态
+hy2stat
+
+# 查看客户端连接
+hy2client
 ```
 
-### 内网穿透配置示例
+## 安全说明
 
-1. HTTP 服务穿透：
-```ini
-[web]
-type = http
-local_ip = 127.0.0.1
-local_port = 80
-custom_domains = web.yourdomain.com
-```
+- 脚本会自动配置防火墙规则
+- 支持 HTTPS 证书自动申请和续期
+- 建议使用域名并启用 HTTPS 以提高安全性
 
-2. HTTPS 服务穿透：
-```ini
-[web-https]
-type = https
-local_ip = 127.0.0.1
-local_port = 443
-custom_domains = secure.yourdomain.com
-```
+## 问题排查
 
-3. TCP 服务穿透（如 SSH）：
-```ini
-[ssh]
-type = tcp
-local_ip = 127.0.0.1
-local_port = 22
-remote_port = 6000
-```
-
-## 手动安装方法
-
-1. 克隆仓库：
-```bash
-git clone https://github.com/xiaosuhuai/vpn.git
-```
-
-2. 进入目录：
-```bash
-cd vpn
-```
-
-3. 选择要安装的工具：
-```bash
-# 安装 Hysteria 2
-bash install.sh
-
-# 或安装 FRP 服务端
-bash install-frps.sh
-```
-
-## 系统要求
-
-- 支持的操作系统：Ubuntu、Debian、CentOS
-- 最低配置要求：
-  - CPU: 1核
-  - 内存: 512MB 及以上
-  - 硬盘: 10GB 及以上
-- 需要 root 权限运行
-- 需要所选端口未被占用
-
-## Hysteria 2 配置
-
-- 配置文件：`/etc/hysteria/config.yaml`
-- 证书文件：`/etc/hysteria/cert.crt`
-- 私钥文件：`/etc/hysteria/private.key`
-- 订阅目录：`/etc/hysteria/subscribe/`
-
-### 服务管理
-```bash
-systemctl start/stop/restart hysteria-server
-systemctl status hysteria-server
-```
-
-## FRP 配置
-
-- 主配置文件：`/etc/frp/frps.ini`
-- 服务文件：`/etc/systemd/system/frps.service`
-- 日志文件：`/var/log/frps.log`
-- Nginx 配置：`/etc/nginx/conf.d/frp-panel.conf`
-
-### 服务管理
-```bash
-# FRP 服务管理
-systemctl start/stop/restart frps
-systemctl status frps
-
-# Nginx 服务管理
-systemctl start/stop/restart nginx
-systemctl status nginx
-```
-
-### SSL 证书配置
-如果需要配置 HTTPS，可以使用以下方法：
-
-1. 使用 Let's Encrypt：
-```bash
-apt install certbot python3-certbot-nginx
-certbot --nginx -d your.domain.com
-```
-
-2. 使用自签名证书：
-```bash
-openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
-  -keyout /etc/nginx/cert.key -out /etc/nginx/cert.crt
-```
-
-## 注意事项
-
-1. 两个服务可以共存，但请注意：
-   - 使用不同的端口
-   - 合理分配系统资源
-   - 正确配置防火墙规则
-2. 安装前请确保：
-   - 系统已安装基本工具（curl、wget、tar）
-   - 所需端口未被占用
-   - 有足够的系统资源
-3. 内存优化建议：
-   - 启用 swap 分区（建议 2GB）
-   - 调整系统 TCP 参数优化网络性能
-   - 使用 Nginx 压缩功能减少带宽占用
-
-## 问题反馈
-
-如果在使用过程中遇到任何问题，请在 GitHub Issues 中提出。
+如果遇到问题，请检查：
+1. 确保端口未被其他服务占用
+2. 检查防火墙配置
+3. 确保域名解析正确（如果使用域名）
+4. 查看服务日志：`journalctl -u hysteria-server`
 
 ## 许可证
 
 MIT License
+
+## 致谢
+
+- [Hysteria](https://github.com/apernet/hysteria) - 感谢 Hysteria 团队开发的优秀代理工具
+- 所有为这个项目做出贡献的开发者 

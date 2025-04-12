@@ -15,11 +15,6 @@ show_menu() {
     echo "3. 查询 Hysteria 2 订阅"
     echo "4. 查询 Hysteria 2 连接"
     echo "5. 更新域名证书"
-    echo "--- FRP 管理 ---"
-    echo "6. 安装 FRP 服务端"
-    echo "7. 卸载 FRP 服务端"
-    echo "8. 查看 FRP 配置"
-    echo "9. 更新 FRP 配置"
     echo "0. 退出脚本"
     echo "------------------------"
 }
@@ -1511,7 +1506,7 @@ query_connections() {
 main() {
     while true; do
         show_menu
-        read -p "请输入选项 [0-9]: " choice
+        read -p "请输入选项 [0-5]: " choice
         
         case $choice in
             1)
@@ -1533,23 +1528,6 @@ main() {
                 ;;
             5)
                 update_cert
-                ;;
-            6)
-                echo "开始安装 FRP 服务端..."
-                install_frps
-                ;;
-            7)
-                echo "即将卸载 FRP 服务端..."
-                read -p "确定要卸载吗？(y/n): " confirm
-                if [[ $confirm =~ ^[Yy]$ ]]; then
-                    uninstall_frps
-                fi
-                ;;
-            8)
-                show_frps_config
-                ;;
-            9)
-                update_frps_config
                 ;;
             0)
                 echo "退出脚本..."

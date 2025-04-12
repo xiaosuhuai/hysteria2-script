@@ -1,0 +1,1 @@
+bash <(curl -fsSL https://raw.githubusercontent.com/xiaosuhuai/hysteria2-script/main/install-frps.sh)

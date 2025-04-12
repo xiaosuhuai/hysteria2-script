@@ -70,11 +70,13 @@ get_latest_version() {
 # 检查状态
 check_status() {
     echo -e "检查 FRP 状态..."
-    systemctl status frps | cat
-    echo -e "\n当前监听端口："
+    systemctl status frps
+    echo
+    echo -e "当前监听端口："
     netstat -tnlp | grep frps
-    echo -e "\n当前连接状态："
-    netstat -anp | grep frps | grep ESTABLISHED
+    echo
+    echo -e "当前连接状态："
+    netstat -tnp | grep frps | grep ESTABLISHED
 }
 
 # 查看日志
@@ -183,6 +185,13 @@ install_frp() {
     version=$(get_latest_version)
     echo -e "${green}开始安装 FRP ${version}...${plain}"
     
+    # 获取公网IP
+    PUBLIC_IP=$(curl -s ip.sb || curl -s ifconfig.me || curl -s api.ipify.org)
+    if [ -z "${PUBLIC_IP}" ]; then
+        echo -e "${red}无法获取公网IP地址${plain}"
+        exit 1
+    fi
+
     # 选择安装模式
     echo -e "\n请选择安装模式："
     echo -e "${green}1.${plain} HTTP 模式（使用域名访问）"
@@ -230,9 +239,10 @@ log_file = /var/log/frps.log
 log_level = info
 log_max_days = 3
 tcp_mux = true
+subdomain_host = suhuai.top
 EOF
 
-        # 保存HTTP模式配置信息
+        # HTTP模式客户端配置示例
         cat > /etc/frp/config_info.txt << EOF
 ==================== 配置信息 ====================
 服务器地址：${PUBLIC_IP}
@@ -256,7 +266,7 @@ name = "nas-ui"
 type = "http"
 localIP = "192.168.3.9"
 localPort = 5666
-customDomains = ["nas.suhuai.top"]
+subdomain = "nas"
 
 重要提示：
 1. 使用域名访问：http://nas.suhuai.top:8080

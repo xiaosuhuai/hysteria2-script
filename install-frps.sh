@@ -82,7 +82,6 @@ dashboard_port = 6443
 dashboard_user = admin
 dashboard_pwd = ${DASHBOARD_PWD}
 token = ${FRP_TOKEN}
-subdomain_host = suhuai.top
 log_file = /var/log/frps.log
 log_level = info
 log_max_days = 3
@@ -150,7 +149,7 @@ name = \"nas-ui\"
 type = \"http\"
 localIP = \"192.168.3.9\"
 localPort = 5666
-customDomains = [\"nas.suhuai.top\"]${plain}"
+subdomain = \"nas\"${plain}"
     echo -e "\n访问地址：${green}http://nas.suhuai.top:8080${plain}"
     echo -e "\n使用以下命令管理 FRP 服务："
     echo -e "启动：${green}systemctl start frps${plain}"
@@ -186,7 +185,7 @@ name = "nas-ui"
 type = "http"
 localIP = "192.168.3.9"
 localPort = 5666
-customDomains = ["nas.suhuai.top"]
+subdomain = "nas"
 
 访问地址：http://nas.suhuai.top:8080
 EOL

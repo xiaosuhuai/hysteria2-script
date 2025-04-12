@@ -237,9 +237,9 @@ EOF
         # HTTP模式配置
         cat > /etc/frp/frps.ini << EOF
 [common]
-bind_port = 5443
-vhost_http_port = 80
-dashboard_port = 6443
+bind_port = 7000
+vhost_http_port = 8080
+dashboard_port = 7500
 dashboard_user = admin
 dashboard_pwd = ${DASHBOARD_PWD}
 token = ${TOKEN}
@@ -247,7 +247,6 @@ log_file = /var/log/frps.log
 log_level = info
 log_max_days = 3
 tcp_mux = true
-subdomain_host = suhuai.top
 EOF
     fi
     
@@ -340,7 +339,7 @@ EOL
     echo -e "==================== 配置信息 ===================="
     echo -e "服务器地址：${green}${PUBLIC_IP}${plain}"
     echo -e "主要端口：${green}5443${plain}"
-    [ "$install_mode" = "2" ] && echo -e "HTTP端口：${green}80${plain}"
+    [ "$install_mode" = "2" ] && echo -e "HTTP端口：${green}8080${plain}"
     echo -e "Dashboard：${green}http://${PUBLIC_IP}:6443${plain}"
     echo -e "Dashboard用户名：${green}admin${plain}"
     echo -e "Dashboard密码：${green}${DASHBOARD_PWD}${plain}"
@@ -399,7 +398,7 @@ EOF
         # HTTP模式客户端配置示例
         echo -e "\n配置示例 (HTTP模式):"
         echo -e "${green}serverAddr = \"${PUBLIC_IP}\"
-serverPort = 5443
+serverPort = 7000
 auth.method = \"token\"
 auth.token = \"${TOKEN}\"
 loginFailExit = false
@@ -409,15 +408,15 @@ name = \"nas-ui\"
 type = \"http\"
 localIP = \"192.168.3.9\"
 localPort = 5666
-subdomain = \"nas\"${plain}"
+customDomains = [\"nas.suhuai.top\"]${plain}"
 
         # 保存HTTP模式配置信息
         cat > /etc/frp/config_info.txt << EOF
 ==================== 配置信息 ====================
 服务器地址：${PUBLIC_IP}
-主要端口：5443
-HTTP端口：80
-Dashboard：http://${PUBLIC_IP}:6443
+主要端口：7000
+HTTP端口：8080
+Dashboard：http://${PUBLIC_IP}:7500
 Dashboard用户名：admin
 Dashboard密码：${DASHBOARD_PWD}
 Token：${TOKEN}
@@ -425,7 +424,7 @@ Token：${TOKEN}
 
 客户端配置示例（HTTP模式）：
 serverAddr = "${PUBLIC_IP}"
-serverPort = 5443
+serverPort = 7000
 auth.method = "token"
 auth.token = "${TOKEN}"
 loginFailExit = false
@@ -435,12 +434,13 @@ name = "nas-ui"
 type = "http"
 localIP = "192.168.3.9"
 localPort = 5666
-subdomain = "nas"
+customDomains = ["nas.suhuai.top"]
 
 重要提示：
-1. 使用域名访问：http://nas.suhuai.top
+1. 使用域名访问：http://nas.suhuai.top:8080
 2. 所有配置信息已保存到：/etc/frp/config_info.txt
-3. 请确保已将域名 ${green}nas.suhuai.top${plain} 解析到服务器IP：${green}${PUBLIC_IP}${plain}"
+3. 请确保已将域名 nas.suhuai.top 解析到服务器IP：${PUBLIC_IP}
+4. 可以通过 Dashboard 监控连接状态：http://${PUBLIC_IP}:7500
 EOF
     fi
 
@@ -450,9 +450,13 @@ EOF
         echo -e "2. 所有配置信息已保存到：${green}/etc/frp/config_info.txt${plain}"
         echo -e "3. 使用TCP模式访问更简单，无需额外配置"
     else
-        echo -e "1. 使用域名访问：${green}http://nas.suhuai.top${plain}"
+        echo -e "1. 使用域名访问：${green}http://nas.suhuai.top:8080${plain}"
         echo -e "2. 所有配置信息已保存到：${green}/etc/frp/config_info.txt${plain}"
         echo -e "3. 请确保已将域名 ${green}nas.suhuai.top${plain} 解析到服务器IP：${green}${PUBLIC_IP}${plain}"
+        echo -e "4. 需要添加以下DNS记录："
+        echo -e "   - 类型：${green}A${plain}"
+        echo -e "   - 主机名：${green}nas${plain}"
+        echo -e "   - 指向：${green}${PUBLIC_IP}${plain}"
     fi
 }
 

@@ -21,9 +21,10 @@ show_menu() {
   ${green}5.${plain} 查看 FRP 日志
   ${green}6.${plain} 重启 FRP
   ${green}7.${plain} 修改 FRP 配置
-————————————————
-"
-    echo && read -p "请输入选择 [0-7]: " num
+  ${green}8.${plain} 检查客户端连接
+  ————————————————"
+    echo && read -p "请输入选择 [0-8]: " num
+
     case "${num}" in
         0) exit 0
         ;;
@@ -33,15 +34,17 @@ show_menu() {
         ;;
         3) uninstall_frp
         ;;
-        4) check_status
+        4) show_status
         ;;
-        5) view_log
+        5) show_log
         ;;
         6) restart_frp
         ;;
         7) modify_config
         ;;
-        *) echo -e "${red}请输入正确的数字 [0-7]${plain}"
+        8) check_client_status
+        ;;
+        *) echo -e "${red}请输入正确的数字 [0-8]${plain}"
         ;;
     esac
 }
@@ -144,14 +147,52 @@ uninstall_frp() {
     exit 0
 }
 
+# 检查端口
+check_ports() {
+    echo -n "检查端口 5443... "
+    if lsof -i:5443 >/dev/null 2>&1; then
+        echo -e "${red}端口被占用${plain}"
+        return 1
+    fi
+    echo -e "${green}可用${plain}"
+
+    echo -n "检查端口 6443... "
+    if lsof -i:6443 >/dev/null 2>&1; then
+        echo -e "${red}端口被占用${plain}"
+        return 1
+    fi
+    echo -e "${green}可用${plain}"
+    return 0
+}
+
+# 验证服务
+verify_service() {
+    echo -n "验证服务状态... "
+    if ! systemctl is-active --quiet frps; then
+        echo -e "${red}服务未正常运行${plain}"
+        echo "查看详细错误信息："
+        systemctl status frps
+        return 1
+    fi
+    echo -e "${green}运行正常${plain}"
+    return 0
+}
+
 # 安装frp
 install_frp() {
+    check_ports || return 1
     version=$(get_latest_version)
     echo -e "${green}开始安装 FRP ${version}...${plain}"
     
+    # 选择安装模式
+    echo -e "\n请选择安装模式："
+    echo -e "${green}1.${plain} TCP 模式（推荐，使用IP直接访问）"
+    echo -e "${green}2.${plain} HTTP 模式（需要域名）"
+    read -p "请输入 [1-2]: " install_mode
+    
     # 生成随机密码
     DASHBOARD_PWD=$(generate_password)
-    FRP_TOKEN=$(generate_password)
+    TOKEN=$(generate_password)
     
     case "$arch" in
         x86_64|amd64)
@@ -178,19 +219,37 @@ install_frp() {
     mkdir -p /etc/frp
     
     # 创建frps配置文件
-    cat > /etc/frp/frps.ini << EOL
+    if [ "$install_mode" = "1" ]; then
+        # TCP模式配置
+        cat > /etc/frp/frps.ini << EOF
+[common]
+bind_port = 5443
+dashboard_port = 6443
+dashboard_user = admin
+dashboard_pwd = ${DASHBOARD_PWD}
+token = ${TOKEN}
+log_file = /var/log/frps.log
+log_level = info
+log_max_days = 3
+tcp_mux = true
+EOF
+    else
+        # HTTP模式配置
+        cat > /etc/frp/frps.ini << EOF
 [common]
 bind_port = 5443
 vhost_http_port = 80
 dashboard_port = 6443
 dashboard_user = admin
 dashboard_pwd = ${DASHBOARD_PWD}
-token = ${FRP_TOKEN}
+token = ${TOKEN}
 log_file = /var/log/frps.log
 log_level = info
 log_max_days = 3
 tcp_mux = true
-EOL
+subdomain_host = suhuai.top
+EOF
+    fi
     
     # 创建systemd服务
     cat > /etc/systemd/system/frps.service << EOL
@@ -268,10 +327,7 @@ EOL
     systemctl start frps
     
     # 检查服务状态
-    if ! systemctl is-active --quiet frps; then
-        echo -e "${red}FRP 服务启动失败，请检查日志${plain}"
-        exit 1
-    fi
+    verify_service
     
     # 清理安装文件
     cd ..
@@ -284,31 +340,20 @@ EOL
     echo -e "==================== 配置信息 ===================="
     echo -e "服务器地址：${green}${PUBLIC_IP}${plain}"
     echo -e "主要端口：${green}5443${plain}"
-    echo -e "HTTP端口：${green}80${plain}"
+    [ "$install_mode" = "2" ] && echo -e "HTTP端口：${green}80${plain}"
     echo -e "Dashboard：${green}http://${PUBLIC_IP}:6443${plain}"
     echo -e "Dashboard用户名：${green}admin${plain}"
     echo -e "Dashboard密码：${green}${DASHBOARD_PWD}${plain}"
-    echo -e "Token：${green}${FRP_TOKEN}${plain}"
+    echo -e "Token：${green}${TOKEN}${plain}"
     echo -e "================================================"
-    echo -e "\n配置示例 (使用域名):"
-    echo -e "${green}serverAddr = \"${PUBLIC_IP}\"
+
+    if [ "$install_mode" = "1" ]; then
+        # TCP模式客户端配置示例
+        echo -e "\n配置示例 (TCP模式):"
+        echo -e "${green}serverAddr = \"${PUBLIC_IP}\"
 serverPort = 5443
 auth.method = \"token\"
-auth.token = \"${FRP_TOKEN}\"
-loginFailExit = false
-
-[[proxies]]
-name = \"nas-ui\"
-type = \"http\"
-localIP = \"192.168.3.9\"
-localPort = 5666
-subdomain = \"nas\"${plain}"
-
-    echo -e "\n配置示例 (直接使用IP):"
-    echo -e "${green}serverAddr = \"${PUBLIC_IP}\"
-serverPort = 5443
-auth.method = \"token\"
-auth.token = \"${FRP_TOKEN}\"
+auth.token = \"${TOKEN}\"
 loginFailExit = false
 
 [[proxies]]
@@ -318,44 +363,22 @@ localIP = \"192.168.3.9\"
 localPort = 5666
 remotePort = 25666${plain}"
 
-    # 保存配置信息到文件
-    cat > /etc/frp/config_info.txt << EOL
-FRP 配置信息
-==========================================
+        # 保存TCP模式配置信息
+        cat > /etc/frp/config_info.txt << EOF
+==================== 配置信息 ====================
 服务器地址：${PUBLIC_IP}
 主要端口：5443
-HTTP端口：80
 Dashboard：http://${PUBLIC_IP}:6443
 Dashboard用户名：admin
 Dashboard密码：${DASHBOARD_PWD}
-Token：${FRP_TOKEN}
-==========================================
+Token：${TOKEN}
+================================================
 
-方案一：使用域名访问
---------------------
-客户端配置 (frpc.toml):
+客户端配置示例（TCP模式）：
 serverAddr = "${PUBLIC_IP}"
 serverPort = 5443
 auth.method = "token"
-auth.token = "${FRP_TOKEN}"
-loginFailExit = false
-
-[[proxies]]
-name = "nas-ui"
-type = "http"
-localIP = "192.168.3.9"
-localPort = 5666
-subdomain = "nas"
-
-访问地址：http://nas.suhuai.top
-
-方案二：直接使用IP访问（推荐）
-----------------------------
-客户端配置 (frpc.toml):
-serverAddr = "${PUBLIC_IP}"
-serverPort = 5443
-auth.method = "token"
-auth.token = "${FRP_TOKEN}"
+auth.token = "${TOKEN}"
 loginFailExit = false
 
 [[proxies]]
@@ -365,23 +388,83 @@ localIP = "192.168.3.9"
 localPort = 5666
 remotePort = 25666
 
-访问地址：http://${PUBLIC_IP}:25666
+重要提示：
+1. 使用IP直接访问：http://${PUBLIC_IP}:25666
+2. 所有配置信息已保存到：/etc/frp/config_info.txt
+3. 使用TCP模式访问更简单，无需额外配置
+4. 可以通过 Dashboard 监控连接状态：http://${PUBLIC_IP}:6443
+EOF
 
-注意事项：
-1. 使用IP方案优点：
-   - 无需配置域名
-   - 直接访问，速度更快
-   - 配置更简单
-   - 无需额外DNS设置
+    else
+        # HTTP模式客户端配置示例
+        echo -e "\n配置示例 (HTTP模式):"
+        echo -e "${green}serverAddr = \"${PUBLIC_IP}\"
+serverPort = 5443
+auth.method = \"token\"
+auth.token = \"${TOKEN}\"
+loginFailExit = false
 
-2. 确保本地服务在 localIP:localPort 正常运行
-3. 确保服务器防火墙已开放相应端口
-EOL
+[[proxies]]
+name = \"nas-ui\"
+type = \"http\"
+localIP = \"192.168.3.9\"
+localPort = 5666
+subdomain = \"nas\"${plain}"
+
+        # 保存HTTP模式配置信息
+        cat > /etc/frp/config_info.txt << EOF
+==================== 配置信息 ====================
+服务器地址：${PUBLIC_IP}
+主要端口：5443
+HTTP端口：80
+Dashboard：http://${PUBLIC_IP}:6443
+Dashboard用户名：admin
+Dashboard密码：${DASHBOARD_PWD}
+Token：${TOKEN}
+================================================
+
+客户端配置示例（HTTP模式）：
+serverAddr = "${PUBLIC_IP}"
+serverPort = 5443
+auth.method = "token"
+auth.token = "${TOKEN}"
+loginFailExit = false
+
+[[proxies]]
+name = "nas-ui"
+type = "http"
+localIP = "192.168.3.9"
+localPort = 5666
+subdomain = "nas"
+
+重要提示：
+1. 使用域名访问：http://nas.suhuai.top
+2. 所有配置信息已保存到：/etc/frp/config_info.txt
+3. 请确保已将域名 ${green}nas.suhuai.top${plain} 解析到服务器IP：${green}${PUBLIC_IP}${plain}"
+EOF
+    fi
 
     echo -e "\n${yellow}重要提示：${plain}"
-    echo -e "1. 使用IP直接访问：${green}http://${PUBLIC_IP}:25666${plain}"
-    echo -e "2. 所有配置信息已保存到：${green}/etc/frp/config_info.txt${plain}"
-    echo -e "3. 使用IP方式访问更简单，无需额外配置"
+    if [ "$install_mode" = "1" ]; then
+        echo -e "1. 使用IP直接访问：${green}http://${PUBLIC_IP}:25666${plain}"
+        echo -e "2. 所有配置信息已保存到：${green}/etc/frp/config_info.txt${plain}"
+        echo -e "3. 使用TCP模式访问更简单，无需额外配置"
+    else
+        echo -e "1. 使用域名访问：${green}http://nas.suhuai.top${plain}"
+        echo -e "2. 所有配置信息已保存到：${green}/etc/frp/config_info.txt${plain}"
+        echo -e "3. 请确保已将域名 ${green}nas.suhuai.top${plain} 解析到服务器IP：${green}${PUBLIC_IP}${plain}"
+    fi
+}
+
+# 检查客户端连接状态
+check_client_status() {
+    echo -e "\n${yellow}检查客户端连接状态：${plain}"
+    if curl -s "http://127.0.0.1:6443/api/proxy/tcp" -u "admin:${DASHBOARD_PWD}" | grep -q "name.*nas-ui"; then
+        echo -e "${green}NAS UI 已连接${plain}"
+    else
+        echo -e "${yellow}NAS UI 未连接${plain}"
+        echo "请检查客户端配置是否正确"
+    fi
 }
 
 # 显示菜单

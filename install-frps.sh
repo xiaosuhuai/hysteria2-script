@@ -186,11 +186,11 @@ dashboard_port = 6443
 dashboard_user = admin
 dashboard_pwd = ${DASHBOARD_PWD}
 token = ${FRP_TOKEN}
+subdomain_host = suhuai.top
 log_file = /var/log/frps.log
 log_level = info
 log_max_days = 3
 tcp_mux = true
-subdomain_host = suhuai.top
 EOL
     
     # 创建systemd服务
@@ -325,6 +325,7 @@ Dashboard：http://${PUBLIC_IP}:6443
 Dashboard用户名：admin
 Dashboard密码：${DASHBOARD_PWD}
 Token：${FRP_TOKEN}
+子域名：nas.suhuai.top
 ==========================================
 
 客户端配置 (frpc.toml):
@@ -342,7 +343,17 @@ localPort = 5666
 subdomain = "nas"
 
 访问地址：http://nas.suhuai.top:8080
+
+注意事项：
+1. 确保已将域名 nas.suhuai.top 解析到服务器IP ${PUBLIC_IP}
+2. 如果要使用其他子域名，只需修改 subdomain 的值
+3. 确保本地服务在 localIP:localPort 正常运行
 EOL
+
+    echo -e "\n${yellow}重要提示：${plain}"
+    echo -e "1. 请确保已将域名 ${green}nas.suhuai.top${plain} 解析到服务器IP ${green}${PUBLIC_IP}${plain}"
+    echo -e "2. 访问地址：${green}http://nas.suhuai.top:8080${plain}"
+    echo -e "3. 所有配置信息已保存到：${green}/etc/frp/config_info.txt${plain}"
 }
 
 # 显示菜单

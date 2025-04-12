@@ -9,6 +9,43 @@ plain='\033[0m'
 # 检查是否为root用户
 [[ $EUID -ne 0 ]] && echo -e "${red}错误：${plain} 必须使用root用户运行此脚本！\n" && exit 1
 
+# 显示菜单
+show_menu() {
+    echo -e "
+  ${green}FRP 管理脚本${plain}
+  ${green}0.${plain} 退出脚本
+  ${green}1.${plain} 安装 FRP
+  ${green}2.${plain} 更新 FRP
+  ${green}3.${plain} 卸载 FRP
+  ${green}4.${plain} 查看 FRP 状态
+  ${green}5.${plain} 查看 FRP 日志
+  ${green}6.${plain} 重启 FRP
+  ${green}7.${plain} 修改 FRP 配置
+————————————————
+"
+    echo && read -p "请输入选择 [0-7]: " num
+    case "${num}" in
+        0) exit 0
+        ;;
+        1) install_frp
+        ;;
+        2) update_frp
+        ;;
+        3) uninstall_frp
+        ;;
+        4) check_status
+        ;;
+        5) view_log
+        ;;
+        6) restart_frp
+        ;;
+        7) modify_config
+        ;;
+        *) echo -e "${red}请输入正确的数字 [0-7]${plain}"
+        ;;
+    esac
+}
+
 # 生成随机密码
 generate_password() {
     openssl rand -base64 12 | tr -dc 'a-zA-Z0-9' | head -c 12
@@ -25,6 +62,73 @@ get_latest_version() {
         exit 1
     fi
     echo "$latest_version"
+}
+
+# 检查状态
+check_status() {
+    echo -e "检查 FRP 状态..."
+    systemctl status frps | cat
+    echo -e "\n当前监听端口："
+    netstat -tnlp | grep frps
+    echo -e "\n当前连接状态："
+    netstat -anp | grep frps | grep ESTABLISHED
+}
+
+# 查看日志
+view_log() {
+    echo -e "FRP 日志最后 50 行："
+    tail -n 50 /var/log/frps.log
+}
+
+# 重启服务
+restart_frp() {
+    echo -e "正在重启 FRP 服务..."
+    systemctl restart frps
+    if systemctl is-active --quiet frps; then
+        echo -e "${green}FRP 重启成功！${plain}"
+    else
+        echo -e "${red}FRP 重启失败，请检查日志${plain}"
+    fi
+}
+
+# 修改配置
+modify_config() {
+    echo -e "当前配置："
+    cat /etc/frp/frps.ini
+    echo -e "\n是否要修改配置？[y/n]"
+    read -p "> " choice
+    if [[ $choice == "y" || $choice == "Y" ]]; then
+        nano /etc/frp/frps.ini
+        echo -e "配置已修改，是否要重启服务？[y/n]"
+        read -p "> " restart
+        if [[ $restart == "y" || $restart == "Y" ]]; then
+            restart_frp
+        fi
+    fi
+}
+
+# 更新 FRP
+update_frp() {
+    echo -e "正在检查最新版本..."
+    local latest_ver=$(get_latest_version)
+    local current_ver=$(frps -v 2>/dev/null | awk '{print $3}')
+    
+    if [ -z "$current_ver" ]; then
+        echo -e "${yellow}未检测到已安装的版本，将进行全新安装${plain}"
+        install_frp
+        return
+    fi
+    
+    echo -e "当前版本：${current_ver}"
+    echo -e "最新版本：${latest_ver}"
+    
+    if [ "$latest_ver" = "$current_ver" ]; then
+        echo -e "${green}已经是最新版本${plain}"
+        return
+    fi
+    
+    echo -e "开始更新..."
+    install_frp
 }
 
 # 卸载frp
@@ -191,12 +295,5 @@ subdomain = "nas"
 EOL
 }
 
-# 根据参数执行操作
-case "$1" in
-    uninstall)
-        uninstall_frp
-        ;;
-    *)
-        install_frp
-        ;;
-esac 
+# 显示菜单
+show_menu 

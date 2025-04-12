@@ -208,10 +208,59 @@ LimitNOFILE=1048576
 
 [Install]
 WantedBy=multi-user.target
+DefaultDependencies=no
 EOL
-    
+
+    # 创建 SysV init 脚本
+    cat > /etc/init.d/frps << EOL
+#!/bin/sh
+### BEGIN INIT INFO
+# Provides:          frps
+# Required-Start:    \$network \$remote_fs \$syslog
+# Required-Stop:     \$network \$remote_fs \$syslog
+# Default-Start:     2 3 4 5
+# Default-Stop:      0 1 6
+# Short-Description: FRP Server Service
+# Description:       Start or stop the FRP Server.
+### END INIT INFO
+
+NAME=frps
+DAEMON=/usr/bin/\$NAME
+PIDFILE=/var/run/\$NAME.pid
+CONFIG=/etc/frp/frps.ini
+
+[ -x "\$DAEMON" ] || exit 0
+
+case "\$1" in
+    start)
+        \$DAEMON -c \$CONFIG
+        ;;
+    stop)
+        killall \$NAME
+        ;;
+    restart)
+        \$0 stop
+        \$0 start
+        ;;
+    status)
+        if pgrep \$NAME >/dev/null; then
+            echo "\$NAME is running"
+        else
+            echo "\$NAME is not running"
+        fi
+        ;;
+    *)
+        echo "Usage: \$0 {start|stop|restart|status}"
+        exit 1
+        ;;
+esac
+
+exit 0
+EOL
+
     # 设置权限
     chmod +x /usr/bin/frps
+    chmod +x /etc/init.d/frps
     
     # 启动服务
     systemctl daemon-reload

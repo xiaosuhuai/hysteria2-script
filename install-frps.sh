@@ -181,12 +181,11 @@ install_frp() {
     cat > /etc/frp/frps.ini << EOL
 [common]
 bind_port = 5443
-vhost_http_port = 8080
+vhost_http_port = 80
 dashboard_port = 6443
 dashboard_user = admin
 dashboard_pwd = ${DASHBOARD_PWD}
 token = ${FRP_TOKEN}
-subdomain_host = suhuai.top
 log_file = /var/log/frps.log
 log_level = info
 log_max_days = 3
@@ -285,13 +284,13 @@ EOL
     echo -e "==================== 配置信息 ===================="
     echo -e "服务器地址：${green}${PUBLIC_IP}${plain}"
     echo -e "主要端口：${green}5443${plain}"
-    echo -e "HTTP端口：${green}8080${plain}"
+    echo -e "HTTP端口：${green}80${plain}"
     echo -e "Dashboard：${green}http://${PUBLIC_IP}:6443${plain}"
     echo -e "Dashboard用户名：${green}admin${plain}"
     echo -e "Dashboard密码：${green}${DASHBOARD_PWD}${plain}"
     echo -e "Token：${green}${FRP_TOKEN}${plain}"
     echo -e "================================================"
-    echo -e "\n客户端配置示例 (frpc.toml):"
+    echo -e "\n配置示例 (使用域名):"
     echo -e "${green}serverAddr = \"${PUBLIC_IP}\"
 serverPort = 5443
 auth.method = \"token\"
@@ -304,17 +303,22 @@ type = \"http\"
 localIP = \"192.168.3.9\"
 localPort = 5666
 subdomain = \"nas\"${plain}"
-    echo -e "\n访问地址：${green}http://nas.suhuai.top:8080${plain}"
-    echo -e "\n使用以下命令管理 FRP 服务："
-    echo -e "启动：${green}systemctl start frps${plain}"
-    echo -e "停止：${green}systemctl stop frps${plain}"
-    echo -e "重启：${green}systemctl restart frps${plain}"
-    echo -e "状态：${green}systemctl status frps${plain}"
-    echo -e "配置文件：${green}/etc/frp/frps.ini${plain}"
-    echo -e "卸载：${yellow}bash $0 uninstall${plain}"
-    
+
+    echo -e "\n配置示例 (直接使用IP):"
+    echo -e "${green}serverAddr = \"${PUBLIC_IP}\"
+serverPort = 5443
+auth.method = \"token\"
+auth.token = \"${FRP_TOKEN}\"
+loginFailExit = false
+
+[[proxies]]
+name = \"nas-ui\"
+type = \"tcp\"
+localIP = \"192.168.3.9\"
+localPort = 5666
+remotePort = 25666${plain}"
+
     # 保存配置信息到文件
-    echo -e "\n配置信息已保存到：${green}/etc/frp/config_info.txt${plain}"
     cat > /etc/frp/config_info.txt << EOL
 FRP 配置信息
 ==========================================
@@ -325,9 +329,10 @@ Dashboard：http://${PUBLIC_IP}:6443
 Dashboard用户名：admin
 Dashboard密码：${DASHBOARD_PWD}
 Token：${FRP_TOKEN}
-子域名：nas.suhuai.top
 ==========================================
 
+方案一：使用域名访问
+--------------------
 客户端配置 (frpc.toml):
 serverAddr = "${PUBLIC_IP}"
 serverPort = 5443
@@ -344,35 +349,39 @@ subdomain = "nas"
 
 访问地址：http://nas.suhuai.top
 
+方案二：直接使用IP访问（推荐）
+----------------------------
+客户端配置 (frpc.toml):
+serverAddr = "${PUBLIC_IP}"
+serverPort = 5443
+auth.method = "token"
+auth.token = "${FRP_TOKEN}"
+loginFailExit = false
+
+[[proxies]]
+name = "nas-ui"
+type = "tcp"
+localIP = "192.168.3.9"
+localPort = 5666
+remotePort = 25666
+
+访问地址：http://${PUBLIC_IP}:25666
+
 注意事项：
-1. 阿里云 DNS 解析设置：
-   - 记录类型：A
-   - 主机记录：nas
-   - 记录值：${PUBLIC_IP}
-   - 解析线路：默认
-   - TTL：10分钟
+1. 使用IP方案优点：
+   - 无需配置域名
+   - 直接访问，速度更快
+   - 配置更简单
+   - 无需额外DNS设置
 
-2. 如果要使用阿里云 DNS 加速：
-   - 登录阿里云控制台
-   - 进入域名解析设置
-   - 开启 DNS 优化加速
-   - 可选：配置智能解析，根据用户来源选择最佳线路
-
-3. 如果要使用其他子域名，只需：
-   - 修改客户端配置中的 subdomain 值
-   - 在阿里云 DNS 中添加对应的 A 记录
-
-4. 确保本地服务在 localIP:localPort 正常运行
+2. 确保本地服务在 localIP:localPort 正常运行
+3. 确保服务器防火墙已开放相应端口
 EOL
 
     echo -e "\n${yellow}重要提示：${plain}"
-    echo -e "1. 请在阿里云 DNS 控制台添加解析记录："
-    echo -e "   - 记录类型：${green}A${plain}"
-    echo -e "   - 主机记录：${green}nas${plain}"
-    echo -e "   - 记录值：${green}${PUBLIC_IP}${plain}"
-    echo -e "2. 访问地址：${green}http://nas.suhuai.top${plain}"
-    echo -e "3. 所有配置信息已保存到：${green}/etc/frp/config_info.txt${plain}"
-    echo -e "4. 建议开启阿里云 DNS 优化加速，可以提升访问速度"
+    echo -e "1. 使用IP直接访问：${green}http://${PUBLIC_IP}:25666${plain}"
+    echo -e "2. 所有配置信息已保存到：${green}/etc/frp/config_info.txt${plain}"
+    echo -e "3. 使用IP方式访问更简单，无需额外配置"
 }
 
 # 显示菜单

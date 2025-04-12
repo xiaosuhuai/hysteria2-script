@@ -25,7 +25,13 @@
 使用以下命令一键安装：
 
 ```bash
-bash <(curl -fsSL https://raw.githubusercontent.com/xiaosuhuai/vpn/main/install.sh)
+wget -N https://raw.githubusercontent.com/xiaosuhuai/hysteria2-script/main/install.sh && bash install.sh
+```
+
+或者使用 curl：
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/xiaosuhuai/hysteria2-script/main/install.sh -o install.sh && bash install.sh
 ```
 
 ### 使用说明

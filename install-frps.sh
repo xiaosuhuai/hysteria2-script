@@ -320,7 +320,7 @@ FRP 配置信息
 ==========================================
 服务器地址：${PUBLIC_IP}
 主要端口：5443
-HTTP端口：8080
+HTTP端口：80
 Dashboard：http://${PUBLIC_IP}:6443
 Dashboard用户名：admin
 Dashboard密码：${DASHBOARD_PWD}
@@ -342,18 +342,37 @@ localIP = "192.168.3.9"
 localPort = 5666
 subdomain = "nas"
 
-访问地址：http://nas.suhuai.top:8080
+访问地址：http://nas.suhuai.top
 
 注意事项：
-1. 确保已将域名 nas.suhuai.top 解析到服务器IP ${PUBLIC_IP}
-2. 如果要使用其他子域名，只需修改 subdomain 的值
-3. 确保本地服务在 localIP:localPort 正常运行
+1. 阿里云 DNS 解析设置：
+   - 记录类型：A
+   - 主机记录：nas
+   - 记录值：${PUBLIC_IP}
+   - 解析线路：默认
+   - TTL：10分钟
+
+2. 如果要使用阿里云 DNS 加速：
+   - 登录阿里云控制台
+   - 进入域名解析设置
+   - 开启 DNS 优化加速
+   - 可选：配置智能解析，根据用户来源选择最佳线路
+
+3. 如果要使用其他子域名，只需：
+   - 修改客户端配置中的 subdomain 值
+   - 在阿里云 DNS 中添加对应的 A 记录
+
+4. 确保本地服务在 localIP:localPort 正常运行
 EOL
 
     echo -e "\n${yellow}重要提示：${plain}"
-    echo -e "1. 请确保已将域名 ${green}nas.suhuai.top${plain} 解析到服务器IP ${green}${PUBLIC_IP}${plain}"
-    echo -e "2. 访问地址：${green}http://nas.suhuai.top:8080${plain}"
+    echo -e "1. 请在阿里云 DNS 控制台添加解析记录："
+    echo -e "   - 记录类型：${green}A${plain}"
+    echo -e "   - 主机记录：${green}nas${plain}"
+    echo -e "   - 记录值：${green}${PUBLIC_IP}${plain}"
+    echo -e "2. 访问地址：${green}http://nas.suhuai.top${plain}"
     echo -e "3. 所有配置信息已保存到：${green}/etc/frp/config_info.txt${plain}"
+    echo -e "4. 建议开启阿里云 DNS 优化加速，可以提升访问速度"
 }
 
 # 显示菜单

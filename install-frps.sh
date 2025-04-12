@@ -1,215 +1,96 @@
 #!/bin/bash
 
 # 颜色定义
-GREEN="\033[0;32m"
-YELLOW="\033[0;33m"
-PLAIN="\033[0m"
+red='\033[0;31m'
+green='\033[0;32m'
+yellow='\033[0;33m'
+plain='\033[0m'
 
 # 检查是否为root用户
-check_root() {
-    if [ "$(id -u)" != "0" ]; then
-        echo -e "请使用root用户运行此脚本"
-        exit 1
-    fi
+[[ $EUID -ne 0 ]] && echo -e "${red}错误：${plain} 必须使用root用户运行此脚本！\n" && exit 1
+
+# 生成随机密码
+generate_password() {
+    openssl rand -base64 12 | tr -dc 'a-zA-Z0-9' | head -c 12
 }
 
-# 检查系统类型
-check_sys() {
-    if [[ -f /etc/redhat-release ]]; then
-        release="centos"
-    elif cat /etc/issue | grep -q -E -i "debian"; then
-        release="debian"
-    elif cat /etc/issue | grep -q -E -i "ubuntu"; then
-        release="ubuntu"
-    elif cat /etc/issue | grep -q -E -i "centos|red hat|redhat"; then
-        release="centos"
-    elif cat /proc/version | grep -q -E -i "debian"; then
-        release="debian"
-    elif cat /proc/version | grep -q -E -i "ubuntu"; then
-        release="ubuntu"
-    elif cat /proc/version | grep -q -E -i "centos|red hat|redhat"; then
-        release="centos"
-    else
-        echo -e "未检测到系统版本，请联系脚本作者"
-        exit 1
-    fi
-}
-
-# 安装必要的软件包
-install_pkg() {
-    if [[ ${release} == "centos" ]]; then
-        yum install -y wget curl tar nginx
-    else
-        apt-get update
-        apt-get install -y wget curl tar nginx
-    fi
-}
+# 获取系统架构
+arch=$(arch)
 
 # 获取最新版本的frp
 get_latest_version() {
-    local latest_release_tag=$(curl -s https://api.github.com/repos/fatedier/frp/releases/latest | grep "tag_name" | cut -d'"' -f4)
-    if [[ -z "$latest_release_tag" ]]; then
-        echo -e "获取frp最新版本失败，请检查网络连接"
+    latest_version=$(curl -s https://api.github.com/repos/fatedier/frp/releases/latest | grep -o '"tag_name": ".*"' | sed 's/"tag_name": "//g' | sed 's/"//g')
+    if [ -z "$latest_version" ]; then
+        echo -e "${red}获取版本信息失败，请检查网络连接${plain}"
         exit 1
     fi
-    echo "$latest_release_tag"
+    echo "$latest_version"
 }
 
-# 下载并安装frps
-download_and_install() {
-    local version=$1
-    local arch="amd64"
-    if [[ "$(uname -m)" == "aarch64" ]]; then
-        arch="arm64"
-    fi
+# 卸载frp
+uninstall_frp() {
+    echo -e "${yellow}正在卸载 FRP...${plain}"
+    systemctl stop frps
+    systemctl disable frps
+    rm -f /etc/systemd/system/frps.service
+    rm -f /usr/bin/frps
+    rm -rf /etc/frp
+    systemctl daemon-reload
+    echo -e "${green}FRP 已成功卸载！${plain}"
+    exit 0
+}
+
+# 安装frp
+install_frp() {
+    version=$(get_latest_version)
+    echo -e "${green}开始安装 FRP ${version}...${plain}"
     
-    local filename="frp_${version:1}_linux_${arch}"
-    local url="https://github.com/fatedier/frp/releases/download/${version}/${filename}.tar.gz"
+    # 生成随机密码
+    DASHBOARD_PWD=$(generate_password)
+    FRP_TOKEN=$(generate_password)
     
-    echo -e "${GREEN}开始下载 frp ${version}...${PLAIN}"
-    wget -O frp.tar.gz ${url}
-    if [[ $? -ne 0 ]]; then
-        echo -e "下载失败，请检查网络连接"
+    case "$arch" in
+        x86_64|amd64)
+            arch="amd64"
+            ;;
+        aarch64|arm64)
+            arch="arm64"
+            ;;
+        *)
+            echo -e "${red}不支持的架构: ${arch}${plain}" && exit 1
+            ;;
+    esac
+    
+    if ! wget -N --no-check-certificate https://github.com/fatedier/frp/releases/download/${version}/frp_${version:1}_linux_${arch}.tar.gz; then
+        echo -e "${red}下载 FRP 失败，请检查网络连接${plain}"
         exit 1
     fi
     
-    tar -xf frp.tar.gz
-    cd ${filename}
+    tar zxvf frp_${version:1}_linux_${arch}.tar.gz
+    cd frp_${version:1}_linux_${arch} || exit
     
     # 复制二进制文件
     cp frps /usr/bin/
-    chmod +x /usr/bin/frps
-    
-    # 创建配置目录
     mkdir -p /etc/frp
     
-    # 移动配置文件
-    cp frps.ini /etc/frp/
-    
-    # 清理临时文件
-    cd ..
-    rm -rf ${filename}
-    rm -f frp.tar.gz
-}
-
-# 配置frps
-configure_frps() {
-    echo -e "${GREEN}使用安全的默认配置...${PLAIN}"
-    
-    # 使用固定的安全端口
-    bind_port=7000
-    vhost_http_port=8080
-    vhost_https_port=4430
-    dashboard_port=7500
-    
-    # 生成随机用户名和密码
-    dashboard_user=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9' | fold -w 8 | head -n 1)
-    dashboard_pwd=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9!@#$%^&*()' | fold -w 16 | head -n 1)
-    
-    # 生成随机Token
-    token=$(cat /dev/urandom | tr -dc 'a-zA-Z0-9!@#$%^&*()' | fold -w 32 | head -n 1)
-    
-    # 生成配置文件
-    cat > /etc/frp/frps.ini << EOF
+    # 创建frps配置文件
+    cat > /etc/frp/frps.ini << EOL
 [common]
-bind_port = ${bind_port}
-vhost_http_port = ${vhost_http_port}
-vhost_https_port = ${vhost_https_port}
-dashboard_port = ${dashboard_port}
-dashboard_user = ${dashboard_user}
-dashboard_pwd = ${dashboard_pwd}
-token = ${token}
-
-# 日志配置
+bind_port = 5443
+vhost_http_port = 8080
+dashboard_port = 6443
+dashboard_user = admin
+dashboard_pwd = ${DASHBOARD_PWD}
+token = ${FRP_TOKEN}
+subdomain_host = suhuai.top
 log_file = /var/log/frps.log
 log_level = info
 log_max_days = 3
-
-# 连接池
-max_pool_count = 50
-
-# 允许的端口范围（限制为常用端口）
-allow_ports = 1024-65535
-
-# 安全配置
-authentication_method = token
-authenticate_heartbeats = true
-authenticate_new_work_conns = true
-
-# 心跳配置
-heartbeat_timeout = 30
-heartbeat_interval = 10
-
-# 带宽限制（单位：KB/MB）
-max_bandwidth_per_client = "1MB"
-
-# TLS配置
-tls_only = true
-tls_cert_file = /etc/frp/server.crt
-tls_key_file = /etc/frp/server.key
-EOF
-
-    # 生成自签名证书
-    openssl req -x509 -nodes -days 3650 -newkey rsa:2048 \
-        -subj "/C=US/ST=NA/L=NA/O=FRP/CN=frps.local" \
-        -keyout /etc/frp/server.key -out /etc/frp/server.crt
-
-    echo -e "${GREEN}已配置安全的默认参数：${PLAIN}"
-    echo -e "frps端口：${bind_port}"
-    echo -e "HTTP端口：${vhost_http_port}"
-    echo -e "HTTPS端口：${vhost_https_port}"
-    echo -e "面板端口：${dashboard_port}"
-    echo -e "面板用户名：${dashboard_user}"
-    echo -e "面板密码：${dashboard_pwd}"
-    echo -e "Token：${token}"
+tcp_mux = true
+EOL
     
-    # 保存配置信息到文件
-    cat > /etc/frp/credentials.txt << EOF
-FRP服务器配置信息
-------------------------
-面板地址：http://$(curl -s ip.sb):${dashboard_port}
-面板用户名：${dashboard_user}
-面板密码：${dashboard_pwd}
-Token：${token}
-------------------------
-请妥善保管此文件！
-EOF
-    
-    chmod 600 /etc/frp/credentials.txt
-    echo -e "${GREEN}配置信息已保存到 /etc/frp/credentials.txt${PLAIN}"
-}
-
-# 配置Nginx
-configure_nginx() {
-    # 创建Nginx配置
-    cat > /etc/nginx/conf.d/frps.conf << EOF
-server {
-    listen 80;
-    server_name _;
-
-    location / {
-        proxy_pass http://127.0.0.1:${dashboard_port};
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
-    }
-}
-EOF
-
-    # 移除默认配置
-    rm -f /etc/nginx/sites-enabled/default
-
-    # 测试配置
-    nginx -t
-
-    # 重启Nginx
-    systemctl restart nginx
-}
-
-# 创建systemd服务
-create_service() {
-    cat > /etc/systemd/system/frps.service << EOF
+    # 创建systemd服务
+    cat > /etc/systemd/system/frps.service << EOL
 [Unit]
 Description=Frp Server Service
 After=network.target
@@ -224,113 +105,99 @@ LimitNOFILE=1048576
 
 [Install]
 WantedBy=multi-user.target
-EOF
-
+EOL
+    
+    # 设置权限
+    chmod +x /usr/bin/frps
+    
+    # 启动服务
     systemctl daemon-reload
     systemctl enable frps
     systemctl start frps
-}
-
-# 配置防火墙
-configure_firewall() {
-    echo -e "${GREEN}配置防火墙规则...${PLAIN}"
     
-    if command -v ufw >/dev/null 2>&1; then
-        ufw allow ${bind_port}/tcp
-        ufw allow ${vhost_http_port}/tcp
-        ufw allow ${vhost_https_port}/tcp
-        ufw allow ${dashboard_port}/tcp
-        ufw allow 80/tcp
-        ufw allow 443/tcp
-    elif command -v firewall-cmd >/dev/null 2>&1; then
-        firewall-cmd --permanent --add-port=${bind_port}/tcp
-        firewall-cmd --permanent --add-port=${vhost_http_port}/tcp
-        firewall-cmd --permanent --add-port=${vhost_https_port}/tcp
-        firewall-cmd --permanent --add-port=${dashboard_port}/tcp
-        firewall-cmd --permanent --add-port=80/tcp
-        firewall-cmd --permanent --add-port=443/tcp
-        firewall-cmd --reload
+    # 检查服务状态
+    if ! systemctl is-active --quiet frps; then
+        echo -e "${red}FRP 服务启动失败，请检查日志${plain}"
+        exit 1
     fi
-}
-
-# 配置系统优化
-optimize_system() {
-    # 设置系统最大打开文件数
-    cat > /etc/security/limits.d/frps.conf << EOF
-* soft nofile 1048576
-* hard nofile 1048576
-EOF
-
-    # 优化内核参数
-    cat > /etc/sysctl.d/local.conf << EOF
-# 最大连接数
-net.core.somaxconn = 2048
-
-# TCP连接参数
-net.ipv4.tcp_max_syn_backlog = 8192
-net.ipv4.tcp_fin_timeout = 30
-net.ipv4.tcp_keepalive_time = 300
-net.ipv4.tcp_keepalive_probes = 3
-net.ipv4.tcp_keepalive_intvl = 30
-
-# 开启端口重用
-net.ipv4.tcp_tw_reuse = 1
-EOF
-
-    sysctl --system
-}
-
-# 显示配置信息
-show_config() {
-    echo -e "\n${GREEN}frps 安装完成！${PLAIN}"
-    echo -e "\n${YELLOW}配置信息：${PLAIN}"
-    echo -e "服务器IP：$(curl -s ip.sb)"
-    echo -e "frps端口：${bind_port}"
-    echo -e "HTTP端口：${vhost_http_port}"
-    echo -e "HTTPS端口：${vhost_https_port}"
-    echo -e "面板地址：http://$(curl -s ip.sb):${dashboard_port}"
-    echo -e "面板用户：${dashboard_user}"
-    echo -e "面板密码：${dashboard_pwd}"
-    echo -e "Token：${token}"
-    echo -e "\n${YELLOW}frpc客户端配置示例：${PLAIN}"
-    echo -e "[common]
-server_addr = $(curl -s ip.sb)
-server_port = ${bind_port}
-token = ${token}
-
-[web]
-type = http
-local_ip = 127.0.0.1
-local_port = 80
-custom_domains = your_domain.com"
-
-    echo -e "\n${YELLOW}服务管理命令：${PLAIN}"
-    echo -e "启动：systemctl start frps"
-    echo -e "停止：systemctl stop frps"
-    echo -e "重启：systemctl restart frps"
-    echo -e "状态：systemctl status frps"
-    echo -e "查看日志：journalctl -u frps"
-}
-
-# 主函数
-main() {
-    check_root
-    check_sys
-    install_pkg
     
-    local version=$(get_latest_version)
-    download_and_install ${version}
-    configure_frps
-    configure_nginx
-    create_service
-    configure_firewall
-    optimize_system
-    show_config
+    # 清理安装文件
+    cd ..
+    rm -rf frp_${version:1}_linux_${arch}.tar.gz frp_${version:1}_linux_${arch}
     
-    echo -e "\n${GREEN}安装完成，服务已启动${PLAIN}"
-    echo -e "如果需要配置HTTPS访问，请使用以下命令安装SSL证书："
-    echo -e "apt install certbot python3-certbot-nginx"
-    echo -e "certbot --nginx -d your.domain.com"
+    # 获取公网IP
+    PUBLIC_IP=$(curl -s ip.sb)
+    
+    echo -e "${green}FRP 安装完成！${plain}"
+    echo -e "==================== 配置信息 ===================="
+    echo -e "服务器地址：${green}${PUBLIC_IP}${plain}"
+    echo -e "主要端口：${green}5443${plain}"
+    echo -e "HTTP端口：${green}8080${plain}"
+    echo -e "Dashboard：${green}http://${PUBLIC_IP}:6443${plain}"
+    echo -e "Dashboard用户名：${green}admin${plain}"
+    echo -e "Dashboard密码：${green}${DASHBOARD_PWD}${plain}"
+    echo -e "Token：${green}${FRP_TOKEN}${plain}"
+    echo -e "================================================"
+    echo -e "\n客户端配置示例 (frpc.toml):"
+    echo -e "${green}serverAddr = \"${PUBLIC_IP}\"
+serverPort = 5443
+auth.method = \"token\"
+auth.token = \"${FRP_TOKEN}\"
+loginFailExit = false
+
+[[proxies]]
+name = \"nas-ui\"
+type = \"http\"
+localIP = \"192.168.3.9\"
+localPort = 5666
+customDomains = [\"nas.suhuai.top\"]${plain}"
+    echo -e "\n访问地址：${green}http://nas.suhuai.top:8080${plain}"
+    echo -e "\n使用以下命令管理 FRP 服务："
+    echo -e "启动：${green}systemctl start frps${plain}"
+    echo -e "停止：${green}systemctl stop frps${plain}"
+    echo -e "重启：${green}systemctl restart frps${plain}"
+    echo -e "状态：${green}systemctl status frps${plain}"
+    echo -e "配置文件：${green}/etc/frp/frps.ini${plain}"
+    echo -e "卸载：${yellow}bash $0 uninstall${plain}"
+    
+    # 保存配置信息到文件
+    echo -e "\n配置信息已保存到：${green}/etc/frp/config_info.txt${plain}"
+    cat > /etc/frp/config_info.txt << EOL
+FRP 配置信息
+==========================================
+服务器地址：${PUBLIC_IP}
+主要端口：5443
+HTTP端口：8080
+Dashboard：http://${PUBLIC_IP}:6443
+Dashboard用户名：admin
+Dashboard密码：${DASHBOARD_PWD}
+Token：${FRP_TOKEN}
+==========================================
+
+客户端配置 (frpc.toml):
+serverAddr = "${PUBLIC_IP}"
+serverPort = 5443
+auth.method = "token"
+auth.token = "${FRP_TOKEN}"
+loginFailExit = false
+
+[[proxies]]
+name = "nas-ui"
+type = "http"
+localIP = "192.168.3.9"
+localPort = 5666
+customDomains = ["nas.suhuai.top"]
+
+访问地址：http://nas.suhuai.top:8080
+EOL
 }
 
-main 
+# 根据参数执行操作
+case "$1" in
+    uninstall)
+        uninstall_frp
+        ;;
+    *)
+        install_frp
+        ;;
+esac 

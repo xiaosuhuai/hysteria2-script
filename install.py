@@ -221,154 +221,8 @@ proxy-groups:
 rules:
   - MATCH,PROXY"""
 
-    def generate_subscribe_page(self, subscribe_path: str, username: str, password: str) -> str:
-        # 获取订阅链接
-        server_ip = self.get_public_ip()
-        clash_url = f"http://{server_ip}/{subscribe_path}/clash"
-        shadowrocket_url = f"sub://aHR0cDovL3tpfS97c30vY2xhc2g="
-        
-        return f"""
-<!DOCTYPE html>
-<html lang="zh-CN">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Hysteria2 订阅</title>
-    <script src="https://cdn.jsdelivr.net/npm/qrcode.js@1.0.0/qrcode.min.js"></script>
-    <style>
-        body {{
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
-            line-height: 1.6;
-            margin: 0;
-            padding: 20px;
-            background: #f5f5f5;
-        }}
-        .container {{
-            max-width: 800px;
-            margin: 0 auto;
-            background: white;
-            padding: 30px;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }}
-        h1 {{
-            color: #333;
-            text-align: center;
-            margin-bottom: 30px;
-        }}
-        .subscription-box {{
-            background: #f8f9fa;
-            border: 1px solid #dee2e6;
-            border-radius: 5px;
-            padding: 20px;
-            margin-bottom: 20px;
-        }}
-        .qr-container {{
-            display: flex;
-            justify-content: space-around;
-            flex-wrap: wrap;
-            margin: 20px 0;
-        }}
-        .qr-box {{
-            text-align: center;
-            margin: 10px;
-        }}
-        .qr-box canvas {{
-            margin-bottom: 10px;
-        }}
-        .button {{
-            display: inline-block;
-            padding: 10px 20px;
-            background: #007bff;
-            color: white;
-            text-decoration: none;
-            border-radius: 5px;
-            margin: 5px;
-        }}
-        .button:hover {{
-            background: #0056b3;
-        }}
-        .copy-btn {{
-            background: #28a745;
-        }}
-        .copy-btn:hover {{
-            background: #218838;
-        }}
-    </style>
-</head>
-<body>
-    <div class="container">
-        <h1>Hysteria2 订阅配置</h1>
-        
-        <div class="subscription-box">
-            <h3>Clash Meta 订阅</h3>
-            <div class="qr-container">
-                <div class="qr-box">
-                    <div id="clash-qr"></div>
-                    <a href="{clash_url}" class="button">直接下载配置</a>
-                    <button onclick="copyToClipboard('{clash_url}')" class="button copy-btn">复制链接</button>
-                </div>
-            </div>
-        </div>
-
-        <div class="subscription-box">
-            <h3>Shadowrocket 订阅</h3>
-            <div class="qr-container">
-                <div class="qr-box">
-                    <div id="shadowrocket-qr"></div>
-                    <a href="{shadowrocket_url}" class="button">直接订阅</a>
-                    <button onclick="copyToClipboard('{shadowrocket_url}')" class="button copy-btn">复制链接</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <script>
-        // 生成二维码
-        new QRCode(document.getElementById('clash-qr'), {{
-            text: '{clash_url}',
-            width: 200,
-            height: 200
-        }});
-        
-        new QRCode(document.getElementById('shadowrocket-qr'), {{
-            text: '{shadowrocket_url}',
-            width: 200,
-            height: 200
-        }});
-
-        // 复制到剪贴板
-        function copyToClipboard(text) {{
-            navigator.clipboard.writeText(text).then(() => {{
-                alert('链接已复制到剪贴板');
-            }}).catch(err => {{
-                console.error('复制失败:', err);
-            }});
-        }}
-    </script>
-</body>
-</html>
-"""
-
-    def generate_htpasswd(self, username: str, password: str) -> str:
-        import crypt
-        salt = crypt.mksalt(crypt.METHOD_SHA512)
-        return f"{username}:{crypt.crypt(password, salt)}"
-
     def setup_nginx(self, subscribe_path: str):
         print("配置 Nginx...")
-        
-        # 生成随机用户名和密码
-        import random
-        import string
-        username = ''.join(random.choices(string.ascii_letters + string.digits, k=8))
-        password = ''.join(random.choices(string.ascii_letters + string.digits, k=12))
-        
-        # 生成 htpasswd 文件
-        auth_dir = Path("/etc/nginx/auth")
-        auth_dir.mkdir(parents=True, exist_ok=True)
-        htpasswd_file = auth_dir / "hysteria.htpasswd"
-        htpasswd_file.write_text(self.generate_htpasswd(username, password))
         
         # 删除所有已存在的配置
         conf_dir = Path("/etc/nginx/conf.d")
@@ -415,7 +269,6 @@ http {
     gzip_types text/plain text/css application/json application/x-javascript text/xml application/xml application/xml+rss text/javascript;
 
     include /etc/nginx/conf.d/*.conf;
-    include /etc/nginx/sites-enabled/*;
 }"""
         
         Path("/etc/nginx/nginx.conf").write_text(main_config)
@@ -433,16 +286,7 @@ http {
     
     root /etc/hysteria/subscribe;
     
-    # 订阅页面（需要认证）
-    location /subscribe {{
-        auth_basic "Restricted Access";
-        auth_basic_user_file /etc/nginx/auth/hysteria.htpasswd;
-        alias /etc/hysteria/subscribe;
-        index index.html;
-        try_files $uri $uri/ /index.html =404;
-    }}
-    
-    # Clash 配置（直接访问，无需认证）
+    # Clash 配置
     location /{subscribe_path}/clash {{
         alias /etc/hysteria/subscribe/clash.yaml;
         default_type text/plain;
@@ -471,16 +315,10 @@ http {
         clash_file = subscribe_dir / "clash.yaml"
         clash_file.write_text(clash_config)
         
-        # 生成并保存订阅页面
-        subscribe_page = self.generate_subscribe_page(subscribe_path, username, password)
-        index_file = subscribe_dir / "index.html"
-        index_file.write_text(subscribe_page)
-        
         # 设置正确的权限
-        os.system(f"chown -R www-data:www-data {subscribe_dir} {auth_dir}")
+        os.system(f"chown -R www-data:www-data {subscribe_dir}")
         os.system(f"chmod -R 755 {subscribe_dir}")
         os.system(f"find {subscribe_dir} -type f -exec chmod 644 {{}} \\;")
-        os.system(f"chmod 640 {htpasswd_file}")
         
         # 创建日志目录并设置权限
         log_dir = Path("/var/log/nginx")
@@ -492,10 +330,6 @@ http {
             subprocess.run(["nginx", "-t"], check=True, capture_output=True)
             subprocess.run(["systemctl", "restart", "nginx"], check=True)
             print("Nginx 配置完成")
-            print(f"\n=== 订阅页面访问信息 ===")
-            print(f"网址: http://{self.get_public_ip()}/subscribe")
-            print(f"用户名: {username}")
-            print(f"密码: {password}\n")
         except subprocess.CalledProcessError as e:
             print(f"Nginx 配置错误: {e.stderr.decode()}")
             raise

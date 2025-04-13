@@ -62,15 +62,28 @@ class HysteriaInstaller:
         subprocess.run(["apt", "update"], check=True)
         subprocess.run(["apt", "install", "-y"] + packages, check=True)
 
+    def check_service_status(self) -> bool:
+        try:
+            result = subprocess.run(
+                ["systemctl", "is-active", "hysteria-server"],
+                capture_output=True,
+                text=True
+            )
+            return result.stdout.strip() == "active"
+        except:
+            return False
+
     def setup_firewall(self, port: int):
+        print(f"配置防火墙规则 (TCP/UDP: {port}, 80, 443)...")
         try:
             subprocess.run(["ufw", "allow", f"{port}/tcp"], check=True)
             subprocess.run(["ufw", "allow", f"{port}/udp"], check=True)
             subprocess.run(["ufw", "allow", "80/tcp"], check=True)
             subprocess.run(["ufw", "allow", "443/tcp"], check=True)
             subprocess.run(["ufw", "--force", "enable"], check=True)
+            print("防火墙配置完成")
         except:
-            pass
+            print("警告: 防火墙配置可能未完全成功，请手动检查")
 
     def generate_random_password(self, length: int = 16) -> str:
         chars = string.ascii_letters + string.digits
@@ -207,6 +220,43 @@ rules:
             f.write(f"Clash订阅：{base_url}\n")
             f.write(f"Shadowrocket订阅：sub://{base64.b64encode(base_url.encode()).decode()}")
 
+    def show_completion_info(self, server_ip: str, port: int, password: str, domain: Optional[str] = None):
+        print("\n=== 安装完成 ===")
+        print(f"服务器: {domain or server_ip}")
+        print(f"端口: {port}")
+        print(f"密码: {password}")
+        
+        # 显示订阅信息
+        info_file = self.subscribe_dir / "info.txt"
+        if info_file.exists():
+            print("\n=== 订阅信息 ===")
+            print(info_file.read_text())
+        
+        # 检查服务状态
+        if self.check_service_status():
+            print("\n✅ 服务状态: 运行中")
+        else:
+            print("\n❌ 警告: 服务可能未正常运行")
+            print("请检查服务状态: systemctl status hysteria-server")
+        
+        print("\n=== 客户端配置 ===")
+        print("1. 使用订阅链接（推荐）")
+        print("   - Clash Meta")
+        print("   - Shadowrocket")
+        print("2. 手动配置")
+        print(f"   - 地址: {domain or server_ip}")
+        print(f"   - 端口: {port}")
+        print(f"   - 密码: {password}")
+        print(f"   - SNI: {domain or server_ip}")
+        print("   - 跳过证书验证: 是")
+        
+        print("\n=== 其他信息 ===")
+        print("1. 配置文件: /etc/hysteria/config.yaml")
+        print("2. 服务控制:")
+        print("   systemctl start/stop/restart hysteria-server")
+        print("3. 查看日志:")
+        print("   journalctl -u hysteria-server -n 50")
+
     def install(self):
         if not self.check_root():
             print("请使用root用户运行此脚本")
@@ -229,8 +279,10 @@ rules:
                 return
             
             password = safe_input("请设置密码 [随机生成]: ").strip() or self.generate_random_password()
+            if not password.strip():
+                password = self.generate_random_password()
+                print(f"已生成随机密码: {password}")
             
-            print("配置防火墙规则...")
             self.setup_firewall(port)
             
             if domain:
@@ -259,11 +311,7 @@ rules:
             print("生成订阅信息...")
             self.setup_subscription(server_ip, port, password, domain)
             
-            print("\n=== 安装完成 ===")
-            print(f"服务器: {domain or server_ip}")
-            print(f"端口: {port}")
-            print(f"密码: {password}")
-            print("\n订阅信息已保存到: /etc/hysteria/subscribe/info.txt")
+            self.show_completion_info(server_ip, port, password, domain)
             
         except Exception as e:
             print(f"\n安装过程中出错: {e}")

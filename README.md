@@ -21,26 +21,14 @@
 
 ## 快速开始
 
-### Shell 版本（功能更丰富）
-
-使用以下命令一键安装：
-
+### Shell 版本（功能更丰富）：
 ```bash
-wget -N https://raw.githubusercontent.com/xiaosuhuai/hysteria2-script/main/install.sh && bash install.sh
+bash <(curl -fsSL https://raw.githubusercontent.com/xiaosuhuai/hysteria2-script/main/install.sh)
 ```
 
-或者使用 curl：
-
+### Python 版本（代码更简洁）：
 ```bash
-curl -fsSL https://raw.githubusercontent.com/xiaosuhuai/hysteria2-script/main/install.sh -o install.sh && bash install.sh
-```
-
-### Python 版本（代码更简洁）
-
-```bash
-wget https://raw.githubusercontent.com/xiaosuhuai/hysteria2-script/main/install.py
-chmod +x install.py
-sudo python3 install.py
+bash <(curl -fsSL https://raw.githubusercontent.com/xiaosuhuai/hysteria2-script/main/install.py.sh)
 ```
 
 ## 版本区别

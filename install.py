@@ -233,22 +233,14 @@ http {
     listen 80;
     listen [::]:80;
     server_name _;
-    charset utf-8;
     
-    access_log /var/log/nginx/hysteria-subscribe-access.log;
-    error_log /var/log/nginx/hysteria-subscribe-error.log;
-
-    location /{subscribe_path}/clash {{
-        alias /etc/hysteria/subscribe/clash.yaml;
-        default_type text/plain;
+    root /etc/hysteria/subscribe;
+    
+    location / {{
+        try_files $uri $uri/ =404;
         add_header Content-Type 'text/plain; charset=utf-8';
         add_header Cache-Control 'no-store';
         add_header Pragma 'no-cache';
-    }}
-    
-    error_page 404 /404.html;
-    location = /404.html {{
-        internal;
     }}
 }}"""
         
@@ -256,9 +248,11 @@ http {
         nginx_conf = Path("/etc/nginx/conf.d/hysteria-subscribe.conf")
         nginx_conf.write_text(subscribe_config)
         
-        # 创建日志目录
-        log_dir = Path("/var/log/nginx")
-        log_dir.mkdir(parents=True, exist_ok=True)
+        # 设置目录权限
+        subscribe_dir = Path("/etc/hysteria/subscribe")
+        subscribe_dir.mkdir(parents=True, exist_ok=True)
+        os.system(f"chown -R www-data:www-data {subscribe_dir}")
+        os.system(f"chmod -R 755 {subscribe_dir}")
         
         # 测试配置并重启
         try:

@@ -61,6 +61,11 @@ class HysteriaInstaller:
         packages = ["curl", "openssl", "nginx", "certbot"]
         subprocess.run(["apt", "update"], check=True)
         subprocess.run(["apt", "install", "-y"] + packages, check=True)
+        
+        # 移除默认的 Nginx 配置
+        default_conf = Path("/etc/nginx/sites-enabled/default")
+        if default_conf.exists():
+            default_conf.unlink()
 
     def check_service_status(self) -> bool:
         try:
@@ -181,6 +186,32 @@ WantedBy=multi-user.target
         with open("/etc/systemd/system/hysteria-server.service", 'w') as f:
             f.write(service_content)
 
+    def setup_nginx(self, subscribe_path: str):
+        print("配置 Nginx...")
+        config = f"""server {{
+    listen 80;
+    server_name _;
+    
+    location /{subscribe_path}/clash {{
+        alias /etc/hysteria/subscribe/clash.yaml;
+        default_type text/plain;
+        add_header Content-Type 'text/plain; charset=utf-8';
+    }}
+}}"""
+        
+        # 创建 Nginx 配置文件
+        nginx_conf = Path("/etc/nginx/conf.d/hysteria.conf")
+        nginx_conf.write_text(config)
+        
+        # 测试配置
+        try:
+            subprocess.run(["nginx", "-t"], check=True, capture_output=True)
+            subprocess.run(["systemctl", "restart", "nginx"], check=True)
+            print("Nginx 配置完成")
+        except subprocess.CalledProcessError as e:
+            print(f"Nginx 配置错误: {e.stderr.decode()}")
+            raise
+
     def setup_subscription(self, server_ip: str, port: int, password: str, domain: Optional[str] = None):
         # 确保目录存在
         self.workspace_dir.mkdir(parents=True, exist_ok=True)
@@ -214,6 +245,9 @@ rules:
 
         with open(self.subscribe_dir / "clash.yaml", "w") as f:
             f.write(config)
+
+        # 配置 Nginx
+        self.setup_nginx(subscribe_path)
 
         base_url = f"{protocol}://{host}/{subscribe_path}/clash"
         with open(self.subscribe_dir / "info.txt", "w") as f:
@@ -330,7 +364,8 @@ rules:
         files_to_remove = [
             "/etc/systemd/system/hysteria-server.service",
             "/usr/local/bin/hysteria",
-            self.workspace_dir
+            self.workspace_dir,
+            "/etc/nginx/conf.d/hysteria.conf"  # 添加 Nginx 配置文件
         ]
         
         for file in files_to_remove:
@@ -340,6 +375,12 @@ rules:
             elif path.is_dir():
                 import shutil
                 shutil.rmtree(path)
+        
+        # 重启 Nginx
+        try:
+            subprocess.run(["systemctl", "restart", "nginx"], check=False)
+        except:
+            pass
         
         subprocess.run(["systemctl", "daemon-reload"], check=True)
         print("卸载完成")

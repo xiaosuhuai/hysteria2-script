@@ -186,15 +186,48 @@ WantedBy=multi-user.target
         with open("/etc/systemd/system/hysteria-server.service", 'w') as f:
             f.write(service_content)
 
+    def generate_clash_config(self) -> str:
+        # 读取配置文件获取服务器信息
+        with open(self.config_file, 'r') as f:
+            config = json.load(f)
+        
+        port = int(config['listen'].replace(':', ''))
+        password = config['auth']['password']
+        
+        # 获取服务器地址
+        server_ip = self.get_public_ip()
+        
+        return f"""mixed-port: 7890
+allow-lan: true
+mode: rule
+log-level: info
+
+proxies:
+  - name: "Hysteria2"
+    type: hysteria2
+    server: {server_ip}
+    port: {port}
+    password: "{password}"
+    sni: {server_ip}
+    skip-cert-verify: true
+
+proxy-groups:
+  - name: "PROXY"
+    type: select
+    proxies:
+      - Hysteria2
+      - DIRECT
+
+rules:
+  - MATCH,PROXY"""
+
     def setup_nginx(self, subscribe_path: str):
         print("配置 Nginx...")
         
-        # 备份默认配置
+        # 删除默认配置
         default_conf = Path("/etc/nginx/sites-enabled/default")
         if default_conf.exists():
-            backup_path = Path("/etc/nginx/sites-enabled/default.bak")
-            if not backup_path.exists():
-                default_conf.rename(backup_path)
+            default_conf.unlink()
         
         # 创建主配置
         main_config = """user www-data;
@@ -217,11 +250,14 @@ http {
     include /etc/nginx/mime.types;
     default_type application/octet-stream;
 
-    access_log /var/log/nginx/access.log;
-    error_log /var/log/nginx/error.log;
+    access_log /var/log/nginx/access.log combined buffer=512k flush=1m;
+    error_log /var/log/nginx/error.log warn;
 
     gzip on;
-    gzip_disable "msie6";
+    gzip_vary on;
+    gzip_proxied any;
+    gzip_comp_level 6;
+    gzip_types text/plain text/css application/json application/x-javascript text/xml application/xml application/xml+rss text/javascript;
 
     include /etc/nginx/conf.d/*.conf;
 }"""
@@ -230,17 +266,28 @@ http {
         
         # 创建订阅配置
         subscribe_config = f"""server {{
-    listen 80;
-    listen [::]:80;
-    server_name _;
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    
+    charset utf-8;
+    
+    access_log /var/log/nginx/subscribe-access.log combined buffer=512k flush=1m;
+    error_log /var/log/nginx/subscribe-error.log warn;
     
     root /etc/hysteria/subscribe;
     
-    location / {{
-        try_files $uri $uri/ =404;
+    location /{subscribe_path}/clash {{
+        alias /etc/hysteria/subscribe/clash.yaml;
+        default_type text/plain;
         add_header Content-Type 'text/plain; charset=utf-8';
-        add_header Cache-Control 'no-store';
+        add_header Cache-Control 'no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0';
         add_header Pragma 'no-cache';
+        add_header Expires '0';
+    }}
+    
+    location = /404.html {{
+        internal;
+        return 404 "404 Not Found";
     }}
 }}"""
         
@@ -248,11 +295,24 @@ http {
         nginx_conf = Path("/etc/nginx/conf.d/hysteria-subscribe.conf")
         nginx_conf.write_text(subscribe_config)
         
-        # 设置目录权限
+        # 确保订阅目录存在并创建订阅文件
         subscribe_dir = Path("/etc/hysteria/subscribe")
         subscribe_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 生成并保存 Clash 配置
+        clash_config = self.generate_clash_config()
+        clash_file = subscribe_dir / "clash.yaml"
+        clash_file.write_text(clash_config)
+        
+        # 设置正确的权限
         os.system(f"chown -R www-data:www-data {subscribe_dir}")
         os.system(f"chmod -R 755 {subscribe_dir}")
+        os.system(f"find {subscribe_dir} -type f -exec chmod 644 {{}} \\;")
+        
+        # 创建日志目录并设置权限
+        log_dir = Path("/var/log/nginx")
+        log_dir.mkdir(parents=True, exist_ok=True)
+        os.system(f"chown -R www-data:www-data {log_dir}")
         
         # 测试配置并重启
         try:
@@ -261,9 +321,6 @@ http {
             print("Nginx 配置完成")
         except subprocess.CalledProcessError as e:
             print(f"Nginx 配置错误: {e.stderr.decode()}")
-            # 如果配置失败，恢复默认配置
-            if backup_path.exists():
-                backup_path.rename(default_conf)
             raise
 
     def setup_subscription(self, server_ip: str, port: int, password: str, domain: Optional[str] = None):

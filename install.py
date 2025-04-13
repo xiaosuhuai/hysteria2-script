@@ -434,11 +434,12 @@ http {
     root /etc/hysteria/subscribe;
     
     # 订阅页面（需要认证）
-    location = /subscribe {{
+    location /subscribe {{
         auth_basic "Restricted Access";
         auth_basic_user_file /etc/nginx/auth/hysteria.htpasswd;
-        default_type text/html;
+        alias /etc/hysteria/subscribe;
         index index.html;
+        try_files $uri $uri/ /index.html =404;
     }}
     
     # Clash 配置（直接访问，无需认证）

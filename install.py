@@ -480,37 +480,71 @@ rules:
     def uninstall(self):
         print("开始卸载 Hysteria 2...")
         
+        # 停止并禁用服务
         subprocess.run(["systemctl", "stop", "hysteria-server"], check=False)
         subprocess.run(["systemctl", "disable", "hysteria-server"], check=False)
         
+        # 清理 Nginx 配置
+        nginx_configs = [
+            Path("/etc/nginx/conf.d/hysteria-subscribe.conf"),
+            Path("/etc/nginx/sites-enabled/hysteria-subscribe"),
+            Path("/etc/nginx/sites-available/hysteria-subscribe")
+        ]
+        
+        # 删除所有 Nginx 相关配置
+        for config in nginx_configs:
+            if config.exists():
+                config.unlink()
+        
+        # 清理主要文件和目录
         files_to_remove = [
             "/etc/systemd/system/hysteria-server.service",
+            "/etc/systemd/system/hysteria-server@.service",
             "/usr/local/bin/hysteria",
-            self.workspace_dir,
-            "/etc/nginx/conf.d/hysteria-subscribe.conf"  # 更新 Nginx 配置文件路径
+            str(self.workspace_dir),
+            "/var/log/nginx/subscribe-access.log",
+            "/var/log/nginx/subscribe-error.log"
         ]
         
         for file in files_to_remove:
             path = Path(file)
             if path.is_file():
-                path.unlink()
+                path.unlink(missing_ok=True)
             elif path.is_dir():
                 import shutil
-                shutil.rmtree(path)
+                shutil.rmtree(path, ignore_errors=True)
         
         # 恢复 Nginx 默认配置
-        backup_path = Path("/etc/nginx/sites-enabled/default.bak")
-        if backup_path.exists():
-            backup_path.rename(Path("/etc/nginx/sites-enabled/default"))
+        default_conf = """server {
+    listen 80 default_server;
+    listen [::]:80 default_server;
+    root /var/www/html;
+    index index.html index.htm index.nginx-debian.html;
+    server_name _;
+    location / {
+        try_files $uri $uri/ =404;
+    }
+}"""
+        
+        nginx_default = Path("/etc/nginx/sites-enabled/default")
+        nginx_default.write_text(default_conf)
         
         # 重启 Nginx
         try:
+            subprocess.run(["nginx", "-t"], check=True, capture_output=True)
             subprocess.run(["systemctl", "restart", "nginx"], check=True)
         except:
-            pass
+            print("警告: Nginx 重启失败，请手动检查配置")
         
+        # 重新加载 systemd
         subprocess.run(["systemctl", "daemon-reload"], check=True)
-        print("卸载完成")
+        
+        print("\n清理完成！以下文件和目录已被删除：")
+        print("1. Hysteria 2 主程序")
+        print("2. 配置文件和证书")
+        print("3. 系统服务文件")
+        print("4. Nginx 配置和日志")
+        print("5. 订阅文件和目录")
 
     def main(self):
         if not self.check_root():

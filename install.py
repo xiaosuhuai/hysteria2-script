@@ -224,10 +224,19 @@ rules:
     def setup_nginx(self, subscribe_path: str):
         print("配置 Nginx...")
         
-        # 删除默认配置
-        default_conf = Path("/etc/nginx/sites-enabled/default")
-        if default_conf.exists():
-            default_conf.unlink()
+        # 删除所有已存在的配置
+        conf_dir = Path("/etc/nginx/conf.d")
+        sites_enabled_dir = Path("/etc/nginx/sites-enabled")
+        
+        # 清理 conf.d 目录
+        if conf_dir.exists():
+            for conf in conf_dir.glob("*.conf"):
+                conf.unlink()
+        
+        # 清理 sites-enabled 目录
+        if sites_enabled_dir.exists():
+            for conf in sites_enabled_dir.glob("*"):
+                conf.unlink()
         
         # 创建主配置
         main_config = """user www-data;
@@ -260,14 +269,16 @@ http {
     gzip_types text/plain text/css application/json application/x-javascript text/xml application/xml application/xml+rss text/javascript;
 
     include /etc/nginx/conf.d/*.conf;
+    include /etc/nginx/sites-enabled/*;
 }"""
         
         Path("/etc/nginx/nginx.conf").write_text(main_config)
         
         # 创建订阅配置
         subscribe_config = f"""server {{
-    listen 80 default_server;
-    listen [::]:80 default_server;
+    listen 80;
+    listen [::]:80;
+    server_name _;
     
     charset utf-8;
     

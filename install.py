@@ -188,28 +188,88 @@ WantedBy=multi-user.target
 
     def setup_nginx(self, subscribe_path: str):
         print("配置 Nginx...")
-        config = f"""server {{
+        
+        # 备份默认配置
+        default_conf = Path("/etc/nginx/sites-enabled/default")
+        if default_conf.exists():
+            backup_path = Path("/etc/nginx/sites-enabled/default.bak")
+            if not backup_path.exists():
+                default_conf.rename(backup_path)
+        
+        # 创建主配置
+        main_config = """user www-data;
+worker_processes auto;
+pid /run/nginx.pid;
+
+events {
+    worker_connections 768;
+    multi_accept on;
+}
+
+http {
+    sendfile on;
+    tcp_nopush on;
+    tcp_nodelay on;
+    keepalive_timeout 65;
+    types_hash_max_size 2048;
+    server_tokens off;
+
+    include /etc/nginx/mime.types;
+    default_type application/octet-stream;
+
+    access_log /var/log/nginx/access.log;
+    error_log /var/log/nginx/error.log;
+
+    gzip on;
+    gzip_disable "msie6";
+
+    include /etc/nginx/conf.d/*.conf;
+}"""
+        
+        Path("/etc/nginx/nginx.conf").write_text(main_config)
+        
+        # 创建订阅配置
+        subscribe_config = f"""server {{
     listen 80;
+    listen [::]:80;
     server_name _;
+    charset utf-8;
     
+    access_log /var/log/nginx/hysteria-subscribe-access.log;
+    error_log /var/log/nginx/hysteria-subscribe-error.log;
+
     location /{subscribe_path}/clash {{
         alias /etc/hysteria/subscribe/clash.yaml;
         default_type text/plain;
         add_header Content-Type 'text/plain; charset=utf-8';
+        add_header Cache-Control 'no-store';
+        add_header Pragma 'no-cache';
+    }}
+    
+    error_page 404 /404.html;
+    location = /404.html {{
+        internal;
     }}
 }}"""
         
-        # 创建 Nginx 配置文件
-        nginx_conf = Path("/etc/nginx/conf.d/hysteria.conf")
-        nginx_conf.write_text(config)
+        # 创建配置文件
+        nginx_conf = Path("/etc/nginx/conf.d/hysteria-subscribe.conf")
+        nginx_conf.write_text(subscribe_config)
         
-        # 测试配置
+        # 创建日志目录
+        log_dir = Path("/var/log/nginx")
+        log_dir.mkdir(parents=True, exist_ok=True)
+        
+        # 测试配置并重启
         try:
             subprocess.run(["nginx", "-t"], check=True, capture_output=True)
             subprocess.run(["systemctl", "restart", "nginx"], check=True)
             print("Nginx 配置完成")
         except subprocess.CalledProcessError as e:
             print(f"Nginx 配置错误: {e.stderr.decode()}")
+            # 如果配置失败，恢复默认配置
+            if backup_path.exists():
+                backup_path.rename(default_conf)
             raise
 
     def setup_subscription(self, server_ip: str, port: int, password: str, domain: Optional[str] = None):
@@ -365,7 +425,7 @@ rules:
             "/etc/systemd/system/hysteria-server.service",
             "/usr/local/bin/hysteria",
             self.workspace_dir,
-            "/etc/nginx/conf.d/hysteria.conf"  # 添加 Nginx 配置文件
+            "/etc/nginx/conf.d/hysteria-subscribe.conf"  # 更新 Nginx 配置文件路径
         ]
         
         for file in files_to_remove:
@@ -376,9 +436,14 @@ rules:
                 import shutil
                 shutil.rmtree(path)
         
+        # 恢复 Nginx 默认配置
+        backup_path = Path("/etc/nginx/sites-enabled/default.bak")
+        if backup_path.exists():
+            backup_path.rename(Path("/etc/nginx/sites-enabled/default"))
+        
         # 重启 Nginx
         try:
-            subprocess.run(["systemctl", "restart", "nginx"], check=False)
+            subprocess.run(["systemctl", "restart", "nginx"], check=True)
         except:
             pass
         

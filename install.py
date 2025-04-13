@@ -9,8 +9,25 @@ import json
 import base64
 import random
 import string
+import locale
 from pathlib import Path
 from typing import Optional
+
+def safe_input(prompt: str) -> str:
+    """安全的输入函数，处理编码问题"""
+    try:
+        return input(prompt)
+    except UnicodeDecodeError:
+        # 如果发生编码错误，尝试使用系统默认编码
+        sys_encoding = locale.getpreferredencoding()
+        if sys.version_info[0] < 3:
+            return input(prompt.encode(sys_encoding)).decode(sys_encoding)
+        else:
+            return input(prompt)
+    except Exception as e:
+        # 如果还是失败，返回空字符串
+        print(f"输入错误: {e}")
+        return ""
 
 class HysteriaInstaller:
     def __init__(self):
@@ -29,7 +46,7 @@ class HysteriaInstaller:
             with urllib.request.urlopen('https://api.ipify.org') as response:
                 return response.read().decode('utf-8')
         except:
-            return input("请手动输入服务器公网IP: ")
+            return safe_input("请手动输入服务器公网IP: ")
 
     def check_port(self, port: int) -> bool:
         try:
@@ -91,6 +108,7 @@ class HysteriaInstaller:
             ], check=True)
             
             cert_path = Path(f"/etc/letsencrypt/live/{domain}")
+            import shutil
             shutil.copy2(cert_path / "fullchain.pem", self.cert_file)
             shutil.copy2(cert_path / "privkey.pem", self.key_file)
             os.chmod(self.cert_file, 0o644)
@@ -181,15 +199,15 @@ rules:
         
         self.install_dependencies()
         
-        use_domain = input("是否使用域名？[y/N]: ").lower() == 'y'
-        domain = input("请输入域名: ").strip() if use_domain else None
+        use_domain = safe_input("是否使用域名？[y/N]: ").lower() == 'y'
+        domain = safe_input("请输入域名: ").strip() if use_domain else None
         
-        port = int(input("请设置端口 [443]: ") or "443")
+        port = int(safe_input("请设置端口 [443]: ") or "443")
         if self.check_port(port):
             print("端口已被占用")
             return
         
-        password = input("请设置密码 [随机生成]: ").strip() or self.generate_random_password()
+        password = safe_input("请设置密码 [随机生成]: ").strip() or self.generate_random_password()
         
         self.setup_firewall(port)
         
@@ -251,12 +269,12 @@ rules:
             print("2. 卸载")
             print("0. 退出")
             
-            choice = input("请选择 [0-2]: ").strip()
+            choice = safe_input("请选择 [0-2]: ").strip()
             
             if choice == "1":
                 self.install()
             elif choice == "2":
-                if input("确认卸载？[y/N]: ").lower() == 'y':
+                if safe_input("确认卸载？[y/N]: ").lower() == 'y':
                     self.uninstall()
             elif choice == "0":
                 break
@@ -264,5 +282,11 @@ rules:
                 print("无效的选项")
 
 if __name__ == "__main__":
+    # 设置默认编码为 UTF-8
+    if sys.stdout.encoding != 'UTF-8':
+        sys.stdout = open(sys.stdout.fileno(), mode='w', encoding='UTF-8', buffering=1)
+    if sys.stderr.encoding != 'UTF-8':
+        sys.stderr = open(sys.stderr.fileno(), mode='w', encoding='UTF-8', buffering=1)
+    
     installer = HysteriaInstaller()
     installer.main() 

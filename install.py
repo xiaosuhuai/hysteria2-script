@@ -118,20 +118,37 @@ class HysteriaInstaller:
             return False
 
     def generate_self_signed_cert(self, ip: str):
-        subprocess.run([
-            "openssl", "req", "-x509",
-            "-nodes",
-            "-newkey", "rsa:2048",
-            "-days", "365",
-            "-keyout", str(self.key_file),
-            "-out", str(self.cert_file),
-            "-subj", f"/CN={ip}"
-        ], check=True)
-        
-        os.chmod(self.cert_file, 0o644)
-        os.chmod(self.key_file, 0o600)
+        print("正在生成自签名证书...")
+        try:
+            # 确保目录存在
+            self.workspace_dir.mkdir(parents=True, exist_ok=True)
+            print(f"工作目录已创建: {self.workspace_dir}")
+            
+            subprocess.run([
+                "openssl", "req", "-x509",
+                "-nodes",
+                "-newkey", "rsa:2048",
+                "-days", "365",
+                "-keyout", str(self.key_file),
+                "-out", str(self.cert_file),
+                "-subj", f"/CN={ip}"
+            ], check=True, capture_output=True, text=True)
+            
+            os.chmod(self.cert_file, 0o644)
+            os.chmod(self.key_file, 0o600)
+            print("证书生成成功")
+            
+        except subprocess.CalledProcessError as e:
+            print(f"生成证书时出错: {e.stderr}")
+            raise
+        except Exception as e:
+            print(f"发生错误: {e}")
+            raise
 
     def create_systemd_service(self):
+        # 确保目录存在
+        self.workspace_dir.mkdir(parents=True, exist_ok=True)
+        
         service_content = """[Unit]
 Description=Hysteria Server
 After=network.target
@@ -152,6 +169,10 @@ WantedBy=multi-user.target
             f.write(service_content)
 
     def setup_subscription(self, server_ip: str, port: int, password: str, domain: Optional[str] = None):
+        # 确保目录存在
+        self.workspace_dir.mkdir(parents=True, exist_ok=True)
+        self.subscribe_dir.mkdir(parents=True, exist_ok=True)
+        
         subscribe_path = os.urandom(16).hex()
         protocol = "https" if domain else "http"
         host = domain if domain else server_ip
@@ -178,7 +199,6 @@ proxy-groups:
 rules:
   - MATCH,PROXY"""
 
-        self.subscribe_dir.mkdir(parents=True, exist_ok=True)
         with open(self.subscribe_dir / "clash.yaml", "w") as f:
             f.write(config)
 
@@ -192,48 +212,66 @@ rules:
             print("请使用root用户运行此脚本")
             return
 
-        print("开始安装 Hysteria 2...")
-        
-        server_ip = self.get_public_ip()
-        print(f"服务器IP: {server_ip}")
-        
-        self.install_dependencies()
-        
-        use_domain = safe_input("是否使用域名？[y/N]: ").lower() == 'y'
-        domain = safe_input("请输入域名: ").strip() if use_domain else None
-        
-        port = int(safe_input("请设置端口 [443]: ") or "443")
-        if self.check_port(port):
-            print("端口已被占用")
-            return
-        
-        password = safe_input("请设置密码 [随机生成]: ").strip() or self.generate_random_password()
-        
-        self.setup_firewall(port)
-        
-        if domain:
-            if not self.setup_ssl(domain):
-                print("SSL证书配置失败")
+        try:
+            print("开始安装 Hysteria 2...")
+            
+            server_ip = self.get_public_ip()
+            print(f"服务器IP: {server_ip}")
+            
+            self.install_dependencies()
+            
+            use_domain = safe_input("是否使用域名？[y/N]: ").lower() == 'y'
+            domain = safe_input("请输入域名: ").strip() if use_domain else None
+            
+            port = int(safe_input("请设置端口 [443]: ") or "443")
+            if self.check_port(port):
+                print("端口已被占用")
                 return
-        else:
-            self.generate_self_signed_cert(server_ip)
-        
-        subprocess.run("curl -fsSL https://get.hy2.sh/ | bash", shell=True, check=True)
-        
-        self.create_config_yaml(port, password, domain)
-        self.create_systemd_service()
-        
-        subprocess.run(["systemctl", "daemon-reload"], check=True)
-        subprocess.run(["systemctl", "enable", "hysteria-server"], check=True)
-        subprocess.run(["systemctl", "restart", "hysteria-server"], check=True)
-        
-        self.setup_subscription(server_ip, port, password, domain)
-        
-        print("\n=== 安装完成 ===")
-        print(f"服务器: {domain or server_ip}")
-        print(f"端口: {port}")
-        print(f"密码: {password}")
-        print("\n订阅信息已保存到: /etc/hysteria/subscribe/info.txt")
+            
+            password = safe_input("请设置密码 [随机生成]: ").strip() or self.generate_random_password()
+            
+            print("配置防火墙规则...")
+            self.setup_firewall(port)
+            
+            if domain:
+                print("配置SSL证书...")
+                if not self.setup_ssl(domain):
+                    print("SSL证书配置失败")
+                    return
+            else:
+                print("生成自签名证书...")
+                self.generate_self_signed_cert(server_ip)
+            
+            print("安装 Hysteria 2...")
+            subprocess.run("curl -fsSL https://get.hy2.sh/ | bash", shell=True, check=True)
+            
+            print("创建配置文件...")
+            self.create_config_yaml(port, password, domain)
+            
+            print("创建系统服务...")
+            self.create_systemd_service()
+            
+            print("启动服务...")
+            subprocess.run(["systemctl", "daemon-reload"], check=True)
+            subprocess.run(["systemctl", "enable", "hysteria-server"], check=True)
+            subprocess.run(["systemctl", "restart", "hysteria-server"], check=True)
+            
+            print("生成订阅信息...")
+            self.setup_subscription(server_ip, port, password, domain)
+            
+            print("\n=== 安装完成 ===")
+            print(f"服务器: {domain or server_ip}")
+            print(f"端口: {port}")
+            print(f"密码: {password}")
+            print("\n订阅信息已保存到: /etc/hysteria/subscribe/info.txt")
+            
+        except Exception as e:
+            print(f"\n安装过程中出错: {e}")
+            print("如果问题持续存在，请检查以下内容：")
+            print("1. 确保所有必需的端口未被占用")
+            print("2. 检查系统防火墙设置")
+            print("3. 确保有足够的磁盘空间")
+            print("4. 查看详细日志: journalctl -u hysteria-server")
 
     def uninstall(self):
         print("开始卸载 Hysteria 2...")
